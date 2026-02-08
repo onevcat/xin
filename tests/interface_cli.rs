@@ -11,6 +11,19 @@ fn run(args: &[&str]) -> (std::process::ExitStatus, serde_json::Value) {
     (output.status, v)
 }
 
+fn run_raw(args: &[&str]) -> (std::process::ExitStatus, String, String) {
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .args(args)
+        .output()
+        .expect("run xin");
+
+    (
+        output.status,
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
 #[test]
 fn help_mentions_key_commands() {
     let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("xin"));
@@ -66,6 +79,15 @@ fn mailboxes_alias_exists_and_has_its_own_command_name() {
 fn account_flag_is_reflected_in_envelope() {
     let (_status, v) = run(&["--account", "fastmail", "labels", "list"]);
     assert_eq!(v.get("account").and_then(|v| v.as_str()), Some("fastmail"));
+}
+
+#[test]
+fn json_plain_flags_conflict_is_a_clap_error() {
+    let (status, _stdout, stderr) = run_raw(&["--json", "--plain", "labels", "list"]);
+
+    // clap exits with code 2 for argument parsing errors.
+    assert_eq!(status.code(), Some(2));
+    assert!(stderr.contains("cannot be used with"));
 }
 
 #[test]
