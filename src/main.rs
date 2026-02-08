@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod config;
 mod error;
+mod headers;
 mod jmap;
 mod output;
 mod schema;

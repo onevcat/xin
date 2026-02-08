@@ -150,6 +150,13 @@ Use `Email/get`.
       - a human-readable entry in `meta.warnings[]`
   - Callers can re-run with `--max-body-bytes <N>`.
 - `--format raw`: include raw pass-through in output (`data.raw`)
+- `--headers a,b,c`: request additional RFC 5322 header fields and return a parsed dictionary in `data.email.headers` (SCHEMA v0).
+  - Uses JMAP computed properties: `header:<Name>:asText`.
+  - For repeatable headers (e.g. `received`, `dkim-signature`, `authentication-results`, `resent-*`), xin requests `header:<Name>:asText:all` and returns an array.
+  - For common structured fields, xin prefers the standard JMAP properties when available:
+    - `message-id` / `in-reply-to` / `references`
+    - `from` / `to` / `cc` / `bcc` / `reply-to` / `sender`
+    - `date`
 
 Typical full request:
 

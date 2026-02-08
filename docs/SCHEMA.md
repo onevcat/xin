@@ -189,7 +189,15 @@ Proposed payload:
     "mailboxIds": {},
     "keywords": {},
     "hasAttachment": false,
-    "preview": "..."
+    "preview": "...",
+
+    "headers": {
+      "message-id": "<...>",
+      "references": ["<...>", "<...>"],
+      "received": ["from ...", "from ..."],
+      "dkim-signature": ["v=1; ..."],
+      "x-custom": "..."
+    }
   },
   "body": {
     "text": "...",
@@ -206,6 +214,9 @@ Proposed payload:
 
 Notes:
 - `raw` is non-null only for `--format raw`.
+- `email.headers` is present only when `xin get ... --headers ...` is provided.
+  - It is a parsed dictionary keyed by **normalized lowercase** header names.
+  - Values are scalars for singleton headers, and arrays for headers that may repeat (e.g. `received`, `dkim-signature`, `authentication-results`, `resent-*`).
 
 ### 4.4 thread get
 

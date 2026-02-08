@@ -262,21 +262,40 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
+    let requested_headers = args
+        .headers
+        .as_deref()
+        .map(crate::headers::parse_headers_arg)
+        .filter(|v| !v.is_empty());
+
+    let extra_header_props = requested_headers
+        .as_ref()
+        .map(|h| crate::headers::extra_email_properties_for_headers(h))
+        .unwrap_or_default();
+
     let props = match args.format {
-        GetFormat::Metadata => Some(vec![
-            jmap_client::email::Property::Id,
-            jmap_client::email::Property::ThreadId,
-            jmap_client::email::Property::ReceivedAt,
-            jmap_client::email::Property::Subject,
-            jmap_client::email::Property::From,
-            jmap_client::email::Property::To,
-            jmap_client::email::Property::Cc,
-            jmap_client::email::Property::Bcc,
-            jmap_client::email::Property::Preview,
-            jmap_client::email::Property::HasAttachment,
-            jmap_client::email::Property::MailboxIds,
-            jmap_client::email::Property::Keywords,
-        ]),
+        GetFormat::Metadata => {
+            let mut p = vec![
+                jmap_client::email::Property::Id,
+                jmap_client::email::Property::ThreadId,
+                jmap_client::email::Property::ReceivedAt,
+                jmap_client::email::Property::Subject,
+                jmap_client::email::Property::From,
+                jmap_client::email::Property::To,
+                jmap_client::email::Property::Cc,
+                jmap_client::email::Property::Bcc,
+                jmap_client::email::Property::Preview,
+                jmap_client::email::Property::HasAttachment,
+                jmap_client::email::Property::MailboxIds,
+                jmap_client::email::Property::Keywords,
+            ];
+            for ep in &extra_header_props {
+                if !p.contains(ep) {
+                    p.push(ep.clone());
+                }
+            }
+            Some(p)
+        }
         GetFormat::Raw => None,
         GetFormat::Full => None,
     };
@@ -285,7 +304,7 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
 
     let email = match args.format {
         GetFormat::Full => match backend
-            .get_email_full(&args.email_id, max_body_value_bytes)
+            .get_email_full(&args.email_id, max_body_value_bytes, extra_header_props.clone())
             .await
         {
             Ok(Some(e)) => e,
@@ -321,25 +340,65 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         },
     };
 
+    // For `--format raw`, we fetch properties=null (all standard properties), but computed
+    // `header:*` properties are only returned when explicitly requested in `properties`.
+    let custom_header_email = if args.format == GetFormat::Raw
+        && requested_headers.is_some()
+        && extra_header_props
+            .iter()
+            .any(|p| matches!(p, jmap_client::email::Property::Header(_)))
+    {
+        match backend
+            .get_email(&args.email_id, Some(extra_header_props.clone()))
+            .await
+        {
+            Ok(Some(e)) => Some(e),
+            Ok(None) => None,
+            Err(e) => return Envelope::err(command_name, account, e),
+        }
+    } else {
+        None
+    };
+
     let raw = match args.format {
         GetFormat::Raw => serde_json::to_value(&email).ok(),
         _ => None,
     };
 
+    let headers_dict = requested_headers.as_ref().map(|h| {
+        crate::headers::extract_headers_dict_dual(&email, custom_header_email.as_ref(), h)
+    });
+
     if args.format == GetFormat::Full {
-        let (data, warnings) = schema::get_email_full_data(&email, raw, max_body_value_bytes);
+        let (mut data, warnings) = schema::get_email_full_data(&email, raw, max_body_value_bytes);
+
+        if let Some(h) = headers_dict {
+            if let Some(email_obj) = data
+                .get_mut("email")
+                .and_then(|v| v.as_object_mut())
+            {
+                email_obj.insert("headers".to_string(), Value::Object(h));
+            }
+        }
+
         let mut meta = Meta::default();
         if !warnings.is_empty() {
             meta.warnings = Some(warnings);
         }
         Envelope::ok(command_name, account, data, meta)
     } else {
-        Envelope::ok(
-            command_name,
-            account,
-            schema::get_email_data(&email, raw),
-            Meta::default(),
-        )
+        let mut data = schema::get_email_data(&email, raw);
+
+        if let Some(h) = headers_dict {
+            if let Some(email_obj) = data
+                .get_mut("email")
+                .and_then(|v| v.as_object_mut())
+            {
+                email_obj.insert("headers".to_string(), Value::Object(h));
+            }
+        }
+
+        Envelope::ok(command_name, account, data, Meta::default())
     }
 }
 

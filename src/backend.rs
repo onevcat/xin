@@ -66,11 +66,13 @@ impl Backend {
         &self,
         email_id: &str,
         max_body_value_bytes: usize,
+        extra_properties: Vec<jmap_client::email::Property>,
     ) -> Result<Option<Email>, XinErrorOut> {
         let mut request = self.j.client().build();
 
         let get_request = request.get_email().ids([email_id]);
-        get_request.properties([
+
+        let mut props: Vec<jmap_client::email::Property> = vec![
             jmap_client::email::Property::Id,
             jmap_client::email::Property::ThreadId,
             jmap_client::email::Property::ReceivedAt,
@@ -88,7 +90,15 @@ impl Backend {
             jmap_client::email::Property::TextBody,
             jmap_client::email::Property::HtmlBody,
             jmap_client::email::Property::Attachments,
-        ]);
+        ];
+
+        for ep in extra_properties {
+            if !props.contains(&ep) {
+                props.push(ep);
+            }
+        }
+
+        get_request.properties(props);
 
         get_request.arguments().body_properties([
             jmap_client::email::BodyProperty::PartId,
