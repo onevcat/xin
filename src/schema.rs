@@ -41,3 +41,34 @@ pub fn email_summary_item(e: &Email) -> Value {
 pub fn email_summary_items(emails: &[Email]) -> Vec<Value> {
     emails.iter().map(email_summary_item).collect()
 }
+
+pub fn get_email_data(email: &Email, raw: Option<Value>) -> Value {
+    // v0 metadata-first: keep a stable shape; fill more fields as READ expands.
+    json!({
+        "email": {
+            "emailId": email.id(),
+            "threadId": email.thread_id(),
+            "receivedAt": received_at_rfc3339(email),
+            "subject": email.subject(),
+            "from": email.from(),
+            "to": email.to(),
+            "cc": email.cc(),
+            "bcc": email.bcc(),
+            "mailboxIds": email
+                .mailbox_ids()
+                .iter()
+                .map(|id| (id.to_string(), Value::Bool(true)))
+                .collect::<serde_json::Map<String, Value>>(),
+            "keywords": email
+                .keywords()
+                .iter()
+                .map(|k| (k.to_string(), Value::Bool(true)))
+                .collect::<serde_json::Map<String, Value>>(),
+            "hasAttachment": email.has_attachment(),
+            "preview": email.preview(),
+        },
+        "body": {"text": null, "html": null},
+        "attachments": [],
+        "raw": raw
+    })
+}

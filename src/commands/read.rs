@@ -4,7 +4,7 @@ use jmap_client::email;
 use serde_json::{json, Value};
 
 use crate::backend::Backend;
-use crate::cli::{MessagesSearchArgs, SearchArgs};
+use crate::cli::{GetArgs, GetFormat, MessagesSearchArgs, SearchArgs};
 use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -243,10 +243,65 @@ pub async fn messages_search(account: Option<String>, args: &MessagesSearchArgs)
     search("messages.search", account, &search_args).await
 }
 
-// Stubs (until we implement full READ suite)
+// READ: get
 
-pub async fn get(_args: &crate::cli::GetArgs) -> Envelope<Value> {
-    Envelope::err("get", None, XinErrorOut::not_implemented("get not implemented yet"))
+pub async fn get(args: &GetArgs) -> Envelope<Value> {
+    let command_name = "get";
+    let account = None;
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let props = match args.format {
+        GetFormat::Metadata => Some(vec![
+            jmap_client::email::Property::Id,
+            jmap_client::email::Property::ThreadId,
+            jmap_client::email::Property::ReceivedAt,
+            jmap_client::email::Property::Subject,
+            jmap_client::email::Property::From,
+            jmap_client::email::Property::To,
+            jmap_client::email::Property::Cc,
+            jmap_client::email::Property::Bcc,
+            jmap_client::email::Property::Preview,
+            jmap_client::email::Property::HasAttachment,
+            jmap_client::email::Property::MailboxIds,
+            jmap_client::email::Property::Keywords,
+        ]),
+        GetFormat::Raw => None,
+        GetFormat::Full => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::not_implemented("get --format full not implemented yet"),
+            );
+        }
+    };
+
+    let email = match backend.get_email(&args.email_id, props).await {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut {
+                    kind: "jmapMethodError".to_string(),
+                    message: "email not found".to_string(),
+                    http: None,
+                    jmap: Some(json!({"type": "notFound"})),
+                },
+            )
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let raw = match args.format {
+        GetFormat::Raw => serde_json::to_value(&email).ok(),
+        _ => None,
+    };
+
+    Envelope::ok(command_name, account, schema::get_email_data(&email, raw), Meta::default())
 }
 
 pub async fn thread_get(_args: &crate::cli::ThreadGetArgs) -> Envelope<Value> {

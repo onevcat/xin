@@ -22,6 +22,23 @@ impl Backend {
         Ok(Self { j })
     }
 
+    pub async fn get_email(
+        &self,
+        email_id: &str,
+        properties: Option<Vec<jmap_client::email::Property>>,
+    ) -> Result<Option<Email>, XinErrorOut> {
+        self.j
+            .client()
+            .email_get(email_id, properties)
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
     pub async fn search(
         &self,
         filter: Option<CoreFilter<email::query::Filter>>,
