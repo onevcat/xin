@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 
 BASE_URL="http://127.0.0.1:39090"
-USER="alice@example.test"
+USER="alice"
 PASS="alice-pass"
 
 # Build xin if needed

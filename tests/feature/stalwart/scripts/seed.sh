@@ -58,7 +58,7 @@ create_user() {
 
   echo "Creating user principal: $email"
   api_json -X POST "$API/principal" -d "$(cat <<JSON
-{ "type": "individual", "name": "$user", "emails": ["$email"], "secrets": ["$pass"] }
+{ "type": "individual", "name": "$user", "emails": ["$email"], "secrets": ["$pass"], "roles": ["user"] }
 JSON
 )"
   echo
