@@ -86,13 +86,35 @@ Operators:
   - `has:attachment` (alias of `hasAttachment:true`)
   - `hasAttachment:true|false`
 
-Boolean logic:
-- AND: implicit by whitespace
-- NOT: prefix `-` (negation)
+Boolean logic (fixed):
 
-**TBD:** `or:(...)` / parentheses grouping; we only add boolean constructs when we can map cleanly to JMAP’s filter combinators.
+JMAP natively supports boolean filter composition via the core **FilterOperator** type:
+
+```json
+{ "operator": "AND"|"OR"|"NOT", "conditions": [ <filter>, <filter>, ... ] }
+```
+
+(Defined in RFC 8620 §5.5 `/query`; Email filter fields are defined in RFC 8621 §4.4.1.)
+
+xin sugar maps directly to this model:
+
+- AND: implicit by whitespace
+  - Example: `from:github seen:false` → AND of two conditions (may be merged into a single FilterCondition object).
+- Grouping (AND): parentheses `(...)`
+  - Example: `(from:github subject:Kingfisher) in:INBOX`
+- OR: `or:( <expr> | <expr> | ... )`
+  - Example: `or:(from:github | from:atlassian) seen:false`
+- NOT: prefix `-` for a term or group
+  - Example: `-in:Trash`, `-(from:spam subject:"sale")`
+
+Parsing/precedence rules:
+- OR exists **only** inside `or:(...)` (no bare `OR` keyword in v0), to keep parsing deterministic.
+- `-` binds to the next term/group.
+- Parentheses always form a subexpression.
 
 #### Compilation (examples)
+
+Simple AND (often merged into one FilterCondition):
 
 - `from:github subject:"Kingfisher" seen:false` →
 
@@ -100,16 +122,47 @@ Boolean logic:
 { "from": "github", "subject": "Kingfisher", "notKeyword": "$seen" }
 ```
 
+Mailbox + time:
+
 - `in:INBOX has:attachment after:2026-01-01` →
 
 ```json
 { "inMailbox": "<resolved-mailbox-id>", "hasAttachment": true, "after": "2026-01-01T00:00:00Z" }
 ```
 
+OR composition (uses FilterOperator):
+
+- `or:(from:github | from:atlassian) seen:false` →
+
+```json
+{
+  "operator": "AND",
+  "conditions": [
+    {
+      "operator": "OR",
+      "conditions": [
+        { "from": "github" },
+        { "from": "atlassian" }
+      ]
+    },
+    { "notKeyword": "$seen" }
+  ]
+}
+```
+
+NOT composition (uses FilterOperator):
+
+- `-(from:spam subject:"sale")` →
+
+```json
+{ "operator": "NOT", "conditions": [ { "from": "spam", "subject": "sale" } ] }
+```
+
 Notes:
 - `in:<...>` requires mailbox name→id resolution via `Mailbox/get`.
-- Time values should be normalized to RFC3339 instants (timezone handling TBD; default local).
+- Time values must be RFC3339; sugar uses a date and xin expands it (timezone handling TBD; default local).
 - If both `<query>` and `--filter-json` are provided, `--filter-json` wins.
+- For AND-only expressions, xin MAY emit a single FilterCondition object with multiple properties (RFC 8621 states multiple properties are equivalent to AND).
 
 JSON output fields (proposal):
 - `items[]`: `{ threadId, latestEmailId, subject, from, to, date, snippet, unread, hasAttachment, mailboxIds, keywords }`
