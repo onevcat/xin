@@ -258,7 +258,8 @@ JSON output fields (proposal):
 **gog analog:** `gog gmail thread get <threadId>`
 **JSON schema:** SCHEMA.md §4.4
 
-- Returns all emails in a thread, optionally with bodies.
+- Returns all emails in a thread.
+- With `--full`, `emails[]` items use the same shape as `xin get --format full` (body + attachments metadata; no bytes inlined).
 
 **TBD:** if provider does not support stable threads, xin may provide a best-effort grouping.
 

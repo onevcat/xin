@@ -209,13 +209,27 @@ Notes:
 
 ### 4.4 thread get
 
-`xin thread get <threadId>`:
+`xin thread get <threadId> [--full]`:
+
+Default (metadata):
 
 ```json
 {
   "threadId": "T...",
   "emailIds": ["M1...","M2..."],
-  "emails": [ /* same shape as get.email */ ]
+  "emails": [ /* metadata email objects (same shape as get.email) */ ]
+}
+```
+
+When `--full` is set, `emails[]` items use the same shape as `xin get --format full`:
+
+```json
+{
+  "threadId": "T...",
+  "emailIds": ["M1...","M2..."],
+  "emails": [
+    { "email": { /* ... */ }, "body": { /* ... */ }, "attachments": [/*...*/], "raw": null }
+  ]
 }
 ```
 

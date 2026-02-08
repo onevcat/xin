@@ -189,6 +189,37 @@ pub fn thread_get_data(thread_id: &str, email_ids: &[String], emails: &[Email]) 
     })
 }
 
+pub fn thread_get_full_data(
+    thread_id: &str,
+    email_ids: &[String],
+    emails: &[Email],
+    max_body_value_bytes: usize,
+) -> (Value, Vec<String>) {
+    let mut out: Vec<Value> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    for e in emails {
+        let (data, w) = get_email_full_data(e, None, max_body_value_bytes);
+        if let Some(email_id) = e.id() {
+            for ww in w {
+                warnings.push(format!("emailId={}: {}", email_id, ww));
+            }
+        } else {
+            warnings.extend(w);
+        }
+        out.push(data);
+    }
+
+    (
+        json!({
+            "threadId": thread_id,
+            "emailIds": email_ids,
+            "emails": out
+        }),
+        warnings,
+    )
+}
+
 pub fn thread_attachments_data(thread_id: &str, emails: &[Email]) -> Value {
     let mut out: Vec<Value> = Vec::new();
 

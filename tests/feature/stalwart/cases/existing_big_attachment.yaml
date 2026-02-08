@@ -76,6 +76,30 @@ steps:
         path: /meta/warnings/0
         contains: "body.html truncated"
 
+  - name: alice-thread-get-full
+    say:
+      - "When fetching the whole thread with --full"
+      - "Then per-email body/attachments should be present in the thread output"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - thread
+        - get
+        - ${threadId}
+        - --full
+    expect:
+      - label: "threadId matches"
+        path: /data/threadId
+        equals: ${threadId}
+      - label: "full email item has attachments"
+        path: /data/emails/0/attachments/0/name
+        equals: "big.bin"
+      - label: "html is truncated in thread full"
+        path: /data/emails/0/body/htmlMeta/isTruncated
+        equals: true
+
   - name: alice-thread-attachments
     env:
       XIN_BASIC_USER: alice

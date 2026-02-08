@@ -352,7 +352,12 @@ pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let result = match backend.thread_get(&args.thread_id, false).await {
+    let max_body_value_bytes = 262144;
+
+    let result = match backend
+        .thread_get(&args.thread_id, false, args.full, max_body_value_bytes)
+        .await
+    {
         Ok(Some(r)) => r,
         Ok(None) => {
             return Envelope::err(
@@ -369,12 +374,26 @@ pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    Envelope::ok(
-        command_name,
-        account,
-        schema::thread_get_data(&result.thread_id, &result.email_ids, &result.emails),
-        Meta::default(),
-    )
+    if args.full {
+        let (data, warnings) = schema::thread_get_full_data(
+            &result.thread_id,
+            &result.email_ids,
+            &result.emails,
+            max_body_value_bytes,
+        );
+        let mut meta = Meta::default();
+        if !warnings.is_empty() {
+            meta.warnings = Some(warnings);
+        }
+        Envelope::ok(command_name, account, data, meta)
+    } else {
+        Envelope::ok(
+            command_name,
+            account,
+            schema::thread_get_data(&result.thread_id, &result.email_ids, &result.emails),
+            Meta::default(),
+        )
+    }
 }
 
 pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value> {
@@ -386,7 +405,10 @@ pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value>
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let result = match backend.thread_get(&args.thread_id, true).await {
+    let result = match backend
+        .thread_get(&args.thread_id, true, false, 262144)
+        .await
+    {
         Ok(Some(r)) => r,
         Ok(None) => {
             return Envelope::err(

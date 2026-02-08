@@ -121,6 +121,8 @@ impl Backend {
         &self,
         thread_id: &str,
         include_attachments: bool,
+        include_body: bool,
+        max_body_value_bytes: usize,
     ) -> Result<Option<ThreadResult>, XinErrorOut> {
         let mut req = self.j.client().build();
 
@@ -146,7 +148,29 @@ impl Backend {
             jmap_client::email::Property::Keywords,
         ];
 
-        if include_attachments {
+        if include_body {
+            props.extend([
+                jmap_client::email::Property::BodyStructure,
+                jmap_client::email::Property::BodyValues,
+                jmap_client::email::Property::TextBody,
+                jmap_client::email::Property::HtmlBody,
+                jmap_client::email::Property::Attachments,
+            ]);
+
+            g.arguments().body_properties([
+                jmap_client::email::BodyProperty::PartId,
+                jmap_client::email::BodyProperty::BlobId,
+                jmap_client::email::BodyProperty::Size,
+                jmap_client::email::BodyProperty::Name,
+                jmap_client::email::BodyProperty::Type,
+                jmap_client::email::BodyProperty::Disposition,
+                jmap_client::email::BodyProperty::Cid,
+            ]);
+            g.arguments()
+                .fetch_text_body_values(true)
+                .fetch_html_body_values(true)
+                .max_body_value_bytes(max_body_value_bytes);
+        } else if include_attachments {
             props.push(jmap_client::email::Property::Attachments);
             g.arguments().body_properties([
                 jmap_client::email::BodyProperty::BlobId,
