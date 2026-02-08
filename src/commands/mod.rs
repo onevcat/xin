@@ -2,18 +2,36 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
-pub fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
-    // Phase 1: command surface only; everything returns NotImplemented.
-    // Keep the command string stable-ish for agent parsing.
+mod read;
+
+pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
     let account = cli.account.clone();
 
-    let (command, _details) = command_name(&cli.command);
+    match &cli.command {
+        Command::Search(args) => read::search("search", account.clone(), args).await,
+        Command::Messages {
+            command: MessagesCommand::Search(args),
+        } => read::messages_search(account.clone(), args).await,
 
-    Envelope::err(
-        command,
-        account,
-        XinErrorOut::not_implemented("command not implemented yet"),
-    )
+        // Phase 2: only READ first.
+        Command::Get(args) => read::get(args).await,
+        Command::Thread {
+            command: ThreadCommand::Get(args),
+        } => read::thread_get(args).await,
+        Command::Thread {
+            command: ThreadCommand::Attachments(args),
+        } => read::thread_attachments(args).await,
+        Command::Attachment(args) => read::attachment_download(args).await,
+
+        _ => {
+            let (command, _details) = command_name(&cli.command);
+            Envelope::err(
+                command,
+                account,
+                XinErrorOut::not_implemented("command not implemented yet"),
+            )
+        }
+    }
 }
 
 fn command_name(cmd: &Command) -> (String, Option<String>) {

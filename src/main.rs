@@ -2,13 +2,16 @@ mod cli;
 mod commands;
 mod error;
 mod output;
+mod config;
+mod jmap;
 
 use clap::Parser;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = cli::Cli::parse();
 
-    let env = commands::dispatch(&cli);
+    let env = commands::dispatch(&cli).await;
     output::print_envelope(&env);
 
     if !env.ok {
