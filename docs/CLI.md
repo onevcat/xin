@@ -54,10 +54,67 @@ Config should support multiple accounts:
 
 - Returns: list of threads (or thread-like groups), with summary fields.
 
-Query support:
-- `query` is **not** Gmail query language.
-- `xin` should define a small portable query DSL (TBD) and always offer:
-  - `--filter-json '<JMAP Email/query filter>'` (escape hatch)
+Query support (DSL v0):
+- We intentionally support a **Gmail-inspired subset** of operators for muscle memory, but this is **xin’s own DSL**.
+- Implementation-wise, this means: **parse DSL → build a JMAP `Email/query` filter JSON**.
+- Always offer an escape hatch:
+  - `--filter-json '<JMAP Email/query filter>'` (raw JMAP)
+
+Why “Gmail-inspired”?
+- Gmail’s search operators are publicly documented (user-facing, not a formal grammar):
+  - https://support.google.com/mail/answer/7190
+
+#### Supported operators (initial)
+
+- Addressing:
+  - `from:<addr|text>`
+  - `to:<addr|text>`
+  - `cc:<addr|text>`
+  - `bcc:<addr|text>`
+- Content:
+  - `subject:<text>`
+  - `"exact phrase"` (quoted)
+  - bare terms: `foo bar` (free text)
+- Time:
+  - `after:YYYY/MM/DD`  (or `YYYY-MM-DD`)
+  - `before:YYYY/MM/DD`
+  - `newer_than:<Nd|Nm|Ny>`
+  - `older_than:<Nd|Nm|Ny>`
+- State:
+  - `is:unread` / `is:read`  (maps to keyword `$seen`)
+  - `is:starred`             (maps to keyword `$flagged`)
+- Location:
+  - `in:inbox` / `in:archive` / `in:trash` / `in:spam` (provider permitting)
+  - `in:anywhere` (no mailbox restriction)
+  - `label:<name>` is accepted as an alias of `in:<name>` for familiarity (JMAP has mailboxes, not Gmail labels)
+- Attachments:
+  - `has:attachment`
+
+#### Boolean logic (initial)
+
+- AND: implicit by whitespace
+- NOT: prefix `-` (e.g. `-from:foo@bar.com`, `-subject:"weekly"`)
+
+**TBD:** `OR`, parentheses, `{}` groups, `AROUND`, size operators (`larger:`/`smaller:`), filename/type operators (`filename:`), category operators (`category:`).
+
+#### Compilation to JMAP filters (high-level)
+
+xin compiles the DSL into a JMAP `Email/query` filter.
+
+- `from:` → `filter.from = "..."`
+- `to:`   → `filter.to = "..."`
+- `cc:` / `bcc:` → corresponding fields
+- `subject:` → `filter.subject = "..."`
+- bare terms / quoted phrases → `filter.text = "..."` (preferred)
+- `has:attachment` → `filter.hasAttachment = true`
+- `after:` / `before:` / `newer_than:` / `older_than:` → `filter.after` / `filter.before` (date math)
+- `is:unread` → `filter.notKeyword = "$seen"`
+- `is:read`   → `filter.hasKeyword = "$seen"`
+- `is:starred` → `filter.hasKeyword = "$flagged"`
+- `in:<mailbox>` → `filter.inMailbox = <mailboxId>` (resolved by name via `Mailbox/get`)
+- NOT (`-term`) → compiled using JMAP’s `operator: "NOT"` wrapper (exact structure TBD)
+
+Note: the exact JMAP filter field names/structures are per RFC 8621 / JMAP Mail spec; xin should validate against server capabilities at runtime.
 
 JSON output fields (proposal):
 - `items[]`: `{ threadId, latestEmailId, subject, from, to, date, snippet, unread, hasAttachment, mailboxIds, keywords }`
