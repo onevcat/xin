@@ -297,34 +297,42 @@ Error behavior:
 
 ### 2.4 Convenience commands (PLUS)
 
-These are intentionally **more ergonomic** than `gog` while still mappable.
+These are intentionally ergonomic **but keep the CLI type system explicit**:
+
+- `xin ...` commands operate on **Email ids**
+- `xin thread ...` commands operate on **Thread ids**
 
 Key RFC concepts:
 - Inbox/Trash/Archive/etc are **Mailboxes** (often identified via `Mailbox.role`).
 - Read/starred/etc are **keywords** (`$seen`, `$flagged`, ...).
 
-Sugar commands define a *client-side convention* for constructing standard `Email/set` updates.
-
 Mailbox roles referenced here are the lowercase versions of IMAP special-use attributes (RFC 6154 / IANA registry), e.g. `inbox`, `drafts`, `sent`, `trash`, `junk`, `archive`.
 
-- `xin archive <id>...`
-  - RFC-style convention: remove membership of the mailbox with role `inbox`.
+#### Email-level sugar (v0)
+
+- `xin archive <emailId>...`
+  - Convention: remove membership of the mailbox with role `inbox`.
   - If a mailbox with role `archive` exists, xin MAY also add it; otherwise archive is represented purely as “not in inbox”.
 
-- `xin read <id>...`
+- `xin read <emailId>...`
   - Add keyword `$seen`.
 
-- `xin unread <id>...`
+- `xin unread <emailId>...`
   - Remove keyword `$seen`.
 
-- `xin trash <id>...`
-  - RFC 8621 guidance for “delete to trash”: set `mailboxIds` to contain **only** the mailbox with role `trash` (i.e. remove all other mailbox memberships).
-  - (If the server rejects, xin surfaces the error.)
+- `xin trash <emailId>...`
+  - RFC 8621 guidance for “delete to trash”: set `mailboxIds` to contain **only** the mailbox with role `trash`.
 
-Notes:
-- Accept both `emailId` and `threadId` where possible; xin can disambiguate via prefix:
-  - `email:<id>` / `thread:<id>` (proposal)
-- Role mapping aliases (v0):
+#### Thread-level sugar (v0)
+
+These mirror the email-level commands, but expand the thread via `Thread/get` then apply the change to each Email via `Email/set`.
+
+- `xin thread archive <threadId>...`
+- `xin thread read <threadId>...`
+- `xin thread unread <threadId>...`
+- `xin thread trash <threadId>...`
+
+Role mapping aliases (v0):
 - treat `spam` as an alias for role `junk`.
 - treat `bin` as an alias for role `trash`.
 
