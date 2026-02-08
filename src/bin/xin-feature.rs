@@ -2,6 +2,7 @@ use clap::Parser;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -207,9 +208,12 @@ fn main() {
             .and_then(|s| s.to_str())
             .unwrap_or("(case)");
         if let Some(it) = &case.it {
-            eprintln!("\n=== CASE: {} — {} ===", file, it);
+            eprintln!(
+                "\n{}",
+                colorize(&format!("=== CASE: {} — {} ===", file, it), "95")
+            );
         } else {
-            eprintln!("\n=== CASE: {} ===", file);
+            eprintln!("\n{}", colorize(&format!("=== CASE: {} ===", file), "95"));
         }
 
         let fresh = cli.fresh || case.requires_fresh;
@@ -237,7 +241,7 @@ fn main() {
     }
 
     if failed.is_empty() {
-        eprintln!("\nOK: all cases passed");
+        eprintln!("\n{}", colorize("OK: all cases passed", "92"));
         return;
     }
 
@@ -247,6 +251,31 @@ fn main() {
     }
 
     std::process::exit(1);
+}
+
+fn use_color() -> bool {
+    // Respect NO_COLOR. By default, only emit ANSI escapes when stderr is a terminal.
+    // If you really want colors in non-tty logs, set XIN_FEATURE_FORCE_COLOR=1.
+    if std::env::var_os("NO_COLOR").is_some() {
+        return false;
+    }
+
+    if std::env::var_os("XIN_FEATURE_FORCE_COLOR").is_some()
+        || std::env::var_os("CLICOLOR_FORCE").is_some()
+        || std::env::var_os("FORCE_COLOR").is_some()
+    {
+        return true;
+    }
+
+    std::io::stderr().is_terminal()
+}
+
+fn colorize(s: &str, code: &str) -> String {
+    if use_color() {
+        format!("\x1b[{code}m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
 }
 
 fn resolve_cases(root_dir: &Path, cli: &Cli) -> Result<Vec<PathBuf>, String> {
@@ -315,7 +344,13 @@ fn run_case(xin_bin: &Path, case: &Case) -> Result<(), String> {
             .map_err(|e| format!("{step_name} failed: {e}"))?;
     }
 
-    eprintln!("OK: case '{}' (runId={})", ctx.case_id, ctx.run_id);
+    eprintln!(
+        "{}",
+        colorize(
+            &format!("OK: case '{}' (runId={})", ctx.case_id, ctx.run_id),
+            "92"
+        )
+    );
     Ok(())
 }
 
