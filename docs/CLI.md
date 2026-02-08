@@ -3,7 +3,17 @@
 This is the **command/flag contract** for `xin`.
 
 - Target audience: humans + agents (JSON-first).
-- Design goal: **match the ergonomics of `gog gmail`**, but operate on **JMAP** accounts.
+- Design goal: **match the ergonomics of `gog gmail`**, but operate on **standard JMAP** accounts.
+
+## Core principle (RFC-first)
+
+xin is a **standards client**:
+
+- xin constructs requests strictly according to the relevant RFCs (JMAP core + JMAP mail/submission).
+- xin does **not** implement provider-specific behavior toggles.
+- If a provider does not support a method/capability, xin still sends the standard request and then reports the resulting JMAP error in a structured way.
+
+(We will, of course, fetch the JMAP Session to discover `apiUrl`, `accountId`, etc., as required by RFC 8620.)
 
 > Notes:
 > - Anything marked **(TBD)** is intentionally left blank for now (needs research or provider support).
@@ -21,6 +31,8 @@ This is the **command/flag contract** for `xin`.
   - `--force`: skip confirmations for destructive commands
   - `--no-input`: never prompt; fail instead
   - `--dry-run`: show intended changes without applying (**PLUS**, recommended for modify/archive/trash)
+- Input convenience (PLUS):
+  - flags that accept JSON (e.g. `--filter-json`) also accept `@/path/to/file.json` to read JSON from file.
 - Account selection:
   - `--account <name>`: choose a configured JMAP account (required when multiple)
 - Logging:
@@ -68,7 +80,14 @@ Sorting (fixed for v0):
 Paging token (fixed for v0):
 - JMAP paging is based on `position/anchor/limit` semantics.
 - xin defines `--page TOKEN` as an opaque cursor (base64url-encoded JSON) containing the minimal state needed to continue.
-- Cursor contents (proposal): `{ "anchor": <id|null>, "position": <int>, "limit": <int>, "collapseThreads": <bool>, "sort": <...>, "filterHash": <...> }`.
+- Cursor contents (fixed):
+  - `position` (int), `limit` (int)
+  - `collapseThreads` (bool)
+  - `sort` (array of JMAP comparators)
+  - `filter` (the compiled JMAP filter JSON, or a stable hash + a separate `filterRef`)
+
+Rule:
+- If the user changes filter/sort/collapseThreads while supplying `--page`, xin MUST error instead of producing surprising results.
 
 Mailbox resolution (fixed for v0):
 - `in:<mailbox>` resolves in this order:
@@ -269,17 +288,32 @@ For parity with gog, `--add/--remove` can remain as a convenience that auto-rout
 
 ### 2.4 Convenience commands (PLUS)
 
-These are intentionally **more ergonomic** than `gog` while still mappable:
+These are intentionally **more ergonomic** than `gog` while still mappable.
 
-- `xin archive <id>...`  
-  Sugar for “remove from INBOX / move to Archive mailbox”.
+Key RFC concepts:
+- Inbox/Trash/Archive/etc are **Mailboxes** (often identified via `Mailbox.role`).
+- Read/starred/etc are **keywords** (`$seen`, `$flagged`, ...).
 
-- `xin read <id>...`  
-  Sugar for adding `$seen`.
+Sugar commands define a *client-side convention* for constructing standard `Email/set` updates:
+
+- `xin archive <id>...`
+  - Convention: remove the Inbox mailbox membership.
+  - If the server has an `archive` role mailbox, xin MAY also add it.
+  - (If the resulting mailbox set would be invalid and the server rejects, xin surfaces the error.)
+
+- `xin read <id>...`
+  - Add keyword `$seen`.
 
 - `xin unread <id>...`
+  - Remove keyword `$seen`.
 
 - `xin trash <id>...`
+  - Add Trash mailbox membership (role `trash`) and remove Inbox membership.
+
+Notes:
+- Accept both `emailId` and `threadId` where possible; xin can disambiguate via prefix:
+  - `email:<id>` / `thread:<id>` (proposal)
+- Role mapping aliases (v0): treat `spam` as alias for role `junk` where present.
 
 Notes:
 - Accept both `emailId` and `threadId` where possible; xin can disambiguate via prefix:
@@ -314,8 +348,8 @@ Proposal:
 
 ## 4) Write
 
-Write commands require the server/account to support the submission capability (`urn:ietf:params:jmap:submission`).
-If unavailable (e.g. read-only/shared accounts), xin should fail with a clear error.
+Write commands are defined by the RFCs (`urn:ietf:params:jmap:submission`).
+Per the RFC-first principle, xin will send standard requests and surface any server errors (e.g. missing capability, forbidden, etc.) as structured output.
 
 ### 4.0 `xin identities list|get <id>` (v0)
 
