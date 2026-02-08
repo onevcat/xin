@@ -461,6 +461,9 @@ Body input:
 
 Behavior (v0):
 - Creates a `text/plain` draft via `Email/set` in the Drafts mailbox.
+  - **Implementation note (temporary):** for compatibility, xin currently sets `textBody + bodyValues` and **does not** set `bodyStructure`.
+    - Rationale: Stalwart rejects `Email/set` create when both `textBody` and `bodyStructure` are set.
+    - This is a **smoke-test enabler**, not a “final” sending implementation.
 - Uses the first available Identity from `Identity/get` as the From identity.
 - Submits via `EmailSubmission/set`.
 

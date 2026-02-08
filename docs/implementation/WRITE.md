@@ -63,7 +63,9 @@ Collect uploaded blobs into the output (`SCHEMA.md §7.2.uploaded`).
 
 ## 3) Create draft via Email/set (RFC 8621 §4.6)
 
-### 3.1 Build deterministic MIME structure (v0)
+### 3.1 Build deterministic MIME structure (future: html/attachments)
+
+This section describes the *intended* approach once xin supports HTML and attachments.
 
 - If plain+html: create a `multipart/alternative` as the body.
 - If any attachments exist: wrap in top-level `multipart/mixed` and append attachment parts.
@@ -72,6 +74,15 @@ In JMAP terms:
 - Use `bodyStructure` (tree of EmailBodyPart)
 - Use `bodyValues` keyed by `partId` for text/html bodies
 - Use `blobId` for attachment parts (from upload)
+
+**Important (v0 reality / smoke-test):** current `xin send` (text/plain only) intentionally does **not** set `bodyStructure`.
+Instead it sets `textBody + bodyValues` only.
+
+- Rationale: Stalwart rejects `Email/set` create when both `textBody` and `bodyStructure` are set.
+- This is a temporary, minimal send implementation to unblock smoke/feature tests.
+- When implementing HTML/attachments, re-evaluate the send strategy:
+  - either go “structured” (`bodyStructure` without `textBody/htmlBody`), or
+  - use `Email/import` with an RFC822 message, if that proves more portable.
 
 ### 3.2 Email/set create
 
