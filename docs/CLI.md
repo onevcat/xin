@@ -5,6 +5,10 @@ This is the **command/flag contract** for `xin`.
 - Target audience: humans + agents (JSON-first).
 - Design goal: **match the ergonomics of `gog gmail`**, but operate on **standard JMAP** accounts.
 
+JSON contract:
+- For `--json` output shapes, see: `docs/SCHEMA.md`.
+- Each command below references the relevant schema section.
+
 ## Core principle (RFC-first)
 
 xin is a **standards client**:
@@ -63,6 +67,7 @@ Config should support multiple accounts:
 
 ### 1.1 `xin search [<query>] [--max N] [--page TOKEN] [--oldest] [--filter-json '<json>']`
 **gog analog:** `gog gmail search` (threads)
+**JSON schema:** SCHEMA.md §4.1
 
 - Returns: list of **thread-like** results by default (see Threading below).
 
@@ -217,11 +222,13 @@ JSON output fields (proposal):
 
 ### 1.2 `xin messages search <query> [--max N] [--page TOKEN]`
 **gog analog:** `gog gmail messages search` (messages)
+**JSON schema:** SCHEMA.md §4.2
 
 - Returns individual `Email` items (not grouped).
 
 ### 1.3 `xin get <emailId> [--format full|metadata|raw] [--headers a,b,c]`
 **gog analog:** `gog gmail get <messageId>`
+**JSON schema:** SCHEMA.md §4.3
 
 - `--format=metadata`: fetch headers only (fast)
 - `--format=full`: includes body (as available/normalized)
@@ -231,6 +238,7 @@ JSON output fields (proposal):
 
 ### 1.4 `xin thread get <threadId> [--full]`
 **gog analog:** `gog gmail thread get <threadId>`
+**JSON schema:** SCHEMA.md §4.4
 
 - Returns all emails in a thread, optionally with bodies.
 
@@ -257,6 +265,9 @@ JSON output fields (proposal):
 ---
 
 ## 2) Organize
+
+**JSON schema (organize):** SCHEMA.md §6
+
 
 ### 2.1 `xin thread modify <threadId> --add X --remove Y`
 **gog analog:** `gog gmail thread modify <threadId> --add/--remove`
@@ -356,11 +367,13 @@ Naming / aliasing (fixed):
 
 ### 3.1 `xin labels list` / `xin mailboxes list`
 **gog analog:** `gog gmail labels list`
+**JSON schema:** SCHEMA.md §5.1
 
 - Lists all mailboxes (via `Mailbox/get` with `ids=null`).
 
 ### 3.2 `xin labels get <mailboxId|name|role>` / `xin mailboxes get ...`
 **gog analog:** `gog gmail labels get ...`
+**JSON schema:** SCHEMA.md §5.2
 
 - Returns mailbox details including unread/total counts when available.
 - Resolution order (v0):
@@ -404,18 +417,22 @@ Notes:
 
 ## 4) Write
 
+**JSON schema (write):** SCHEMA.md §7
+
 Write commands are defined by the RFCs (`urn:ietf:params:jmap:submission`).
-Per the RFC-first principle, xin will send standard requests and surface any server errors (e.g. missing capability, forbidden, etc.) as structured output.
+Per the RFC-first principle, xin will send standard requests and surface any server errors as structured output.
 
 ### 4.0 `xin identities list|get <id>` (v0)
+**JSON schema:** SCHEMA.md §7.1
 
-- Lists available sending identities (if supported).
+- Lists available sending identities.
 - Useful for figuring out which From addresses/aliases are permitted.
 
 **JMAP:** `Identity/get`
 
 ### 4.1 `xin send --to ... --subject ... (--body ... | --body-file ... | --body-html ...) [--cc ...] [--bcc ...] [--attach ...] [--identity <id|email>]`
 **gog analog:** `gog gmail send ...`
+**JSON schema:** SCHEMA.md §7.2
 
 Reply support (v0):
 - `--reply-to-email-id <id>`
