@@ -16,6 +16,9 @@ export XIN_BASIC_USER="$USER"
 export XIN_BASIC_PASS="$PASS"
 
 # Minimal connectivity check: should succeed even with empty inbox.
-"$ROOT_DIR/target/debug/xin" messages search --filter-json '{"text":"xin-smoke"}' --max 1 >/dev/null
+OUT="$("$ROOT_DIR/target/debug/xin" messages search --filter-json '{"text":"xin-smoke"}' --max 1)"
+
+echo "$OUT" | /usr/bin/grep -q '"ok": true'
+echo "$OUT" | /usr/bin/grep -q '"command": "messages.search"'
 
 echo "OK: xin can connect to Stalwart via Basic auth (JMAP)."
