@@ -310,17 +310,22 @@ Mailbox roles referenced here are the lowercase versions of IMAP special-use att
 
 #### Email-level sugar (v0)
 
-- `xin archive <emailId>...`
+All email-level sugar commands accept an optional (PLUS) flag:
+- `--whole-thread`: apply the action to the entire thread containing the given email.
+  - v0 constraint: only allowed when exactly **one** emailId is provided.
+  - Implementation: `Email/get` → obtain `threadId` → perform the corresponding `xin thread ...` action (`Thread/get` → `Email/set`).
+
+- `xin archive <emailId>... [--whole-thread]`
   - Convention: remove membership of the mailbox with role `inbox`.
   - If a mailbox with role `archive` exists, xin MAY also add it; otherwise archive is represented purely as “not in inbox”.
 
-- `xin read <emailId>...`
+- `xin read <emailId>... [--whole-thread]`
   - Add keyword `$seen`.
 
-- `xin unread <emailId>...`
+- `xin unread <emailId>... [--whole-thread]`
   - Remove keyword `$seen`.
 
-- `xin trash <emailId>...`
+- `xin trash <emailId>... [--whole-thread]`
   - RFC 8621 guidance for “delete to trash”: set `mailboxIds` to contain **only** the mailbox with role `trash`.
 
 #### Thread-level sugar (v0)
