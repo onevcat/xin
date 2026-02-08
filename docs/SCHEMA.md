@@ -52,6 +52,7 @@ Common optional fields:
 - `requestId`: string|null (xin-generated)
 - `nextPage`: string|null (opaque cursor for `--page`)
 - `warnings`: string[]|null
+  - Example: body truncation warnings for `get --format full` when `maxBodyValueBytes` is exceeded.
 
 ---
 
@@ -192,7 +193,9 @@ Proposed payload:
   },
   "body": {
     "text": "...",
-    "html": "..."
+    "html": "...",
+    "textMeta": {"isTruncated": true, "isEncodingProblem": false},
+    "htmlMeta": {"isTruncated": false, "isEncodingProblem": false}
   },
   "attachments": [
     { "emailId": "M...", "blobId": "B...", "name": "a.pdf", "type": "application/pdf", "size": 1234, "disposition": "attachment" }

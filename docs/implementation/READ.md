@@ -142,7 +142,14 @@ Use `Email/get`.
 
 - `--format metadata`: request summary properties only
 - `--format full`: also request body structure and body values
-- `--format raw`: request large property set and include raw pass-through in output
+  - Use JMAP `maxBodyValueBytes` to keep output bounded.
+  - **xin default:** 262144 (256KiB) per body value.
+  - If the server truncates, it will return `EmailBodyValue.isTruncated=true`.
+    - xin surfaces this as:
+      - `data.body.textMeta.isTruncated` / `data.body.htmlMeta.isTruncated`
+      - a human-readable entry in `meta.warnings[]`
+  - Callers can re-run with `--max-body-bytes <N>`.
+- `--format raw`: include raw pass-through in output (`data.raw`)
 
 Typical full request:
 

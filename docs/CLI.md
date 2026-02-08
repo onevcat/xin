@@ -226,12 +226,17 @@ JSON output fields (proposal):
 
 - Returns individual `Email` items (not grouped).
 
-### 1.3 `xin get <emailId> [--format full|metadata|raw] [--headers a,b,c]`
+### 1.3 `xin get <emailId> [--format full|metadata|raw] [--max-body-bytes N] [--headers a,b,c]`
 **gog analog:** `gog gmail get <messageId>`
 **JSON schema:** SCHEMA.md §4.3
 
 - `--format=metadata`: fetch headers only (fast)
 - `--format=full`: includes body (as available/normalized)
+  - Default `maxBodyValueBytes` = 262144 (256KiB) per body value.
+  - If truncated, xin will:
+    - set `data.body.textMeta.isTruncated` / `data.body.htmlMeta.isTruncated` to true
+    - add a human-readable warning string into `meta.warnings[]`
+  - To fetch more, re-run with `--max-body-bytes <N>`.
 - `--format=raw`: return provider raw JMAP `Email` object
 
 **TBD:** body normalization rules across providers (text/plain vs html, inlined parts).

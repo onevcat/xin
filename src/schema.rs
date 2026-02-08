@@ -67,6 +67,91 @@ fn email_metadata_object(email: &Email) -> Value {
     })
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+struct BodyMeta {
+    #[serde(rename = "isTruncated")]
+    is_truncated: bool,
+    #[serde(rename = "isEncodingProblem")]
+    is_encoding_problem: bool,
+}
+
+fn extract_body_value(email: &Email, part_id: &str) -> (Option<String>, Option<BodyMeta>) {
+    let bv = match email.body_value(part_id) {
+        Some(v) => v,
+        None => return (None, None),
+    };
+
+    let meta = BodyMeta {
+        is_truncated: bv.is_truncated(),
+        is_encoding_problem: bv.is_encoding_problem(),
+    };
+
+    (Some(bv.value().to_string()), Some(meta))
+}
+
+pub fn extract_full_body(email: &Email, max_body_value_bytes: usize) -> (Value, Vec<String>) {
+    let mut warnings: Vec<String> = Vec::new();
+
+    let (text, text_meta) = email
+        .text_body()
+        .and_then(|parts| parts.first())
+        .and_then(|p| p.part_id())
+        .map(|pid| extract_body_value(email, pid))
+        .unwrap_or((None, None));
+
+    let (html, html_meta) = email
+        .html_body()
+        .and_then(|parts| parts.first())
+        .and_then(|p| p.part_id())
+        .map(|pid| extract_body_value(email, pid))
+        .unwrap_or((None, None));
+
+    if let Some(meta) = &text_meta {
+        if meta.is_truncated {
+            warnings.push(format!(
+                "body.text truncated (maxBodyValueBytes={})",
+                max_body_value_bytes
+            ));
+        }
+    }
+    if let Some(meta) = &html_meta {
+        if meta.is_truncated {
+            warnings.push(format!(
+                "body.html truncated (maxBodyValueBytes={})",
+                max_body_value_bytes
+            ));
+        }
+    }
+
+    let body = json!({
+        "text": text,
+        "html": html,
+        "textMeta": text_meta,
+        "htmlMeta": html_meta
+    });
+
+    (body, warnings)
+}
+
+pub fn extract_attachments(email: &Email) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::new();
+
+    if let Some(parts) = email.attachments() {
+        for p in parts {
+            out.push(json!({
+                "emailId": email.id(),
+                "blobId": p.blob_id(),
+                "name": p.name(),
+                "type": p.content_type(),
+                "size": p.size(),
+                "disposition": p.content_disposition()
+            }));
+        }
+    }
+
+    out
+}
+
 pub fn get_email_data(email: &Email, raw: Option<Value>) -> Value {
     // v0 metadata-first: keep a stable shape; fill more fields as READ expands.
     json!({
@@ -75,6 +160,25 @@ pub fn get_email_data(email: &Email, raw: Option<Value>) -> Value {
         "attachments": [],
         "raw": raw
     })
+}
+
+pub fn get_email_full_data(
+    email: &Email,
+    raw: Option<Value>,
+    max_body_value_bytes: usize,
+) -> (Value, Vec<String>) {
+    let (body, warnings) = extract_full_body(email, max_body_value_bytes);
+    let attachments = extract_attachments(email);
+
+    (
+        json!({
+            "email": email_metadata_object(email),
+            "body": body,
+            "attachments": attachments,
+            "raw": raw
+        }),
+        warnings,
+    )
 }
 
 pub fn thread_get_data(thread_id: &str, email_ids: &[String], emails: &[Email]) -> Value {

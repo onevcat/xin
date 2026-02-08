@@ -272,30 +272,44 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
             jmap_client::email::Property::Keywords,
         ]),
         GetFormat::Raw => None,
-        GetFormat::Full => {
-            return Envelope::err(
-                command_name,
-                account,
-                XinErrorOut::not_implemented("get --format full not implemented yet"),
-            );
-        }
+        GetFormat::Full => None,
     };
 
-    let email = match backend.get_email(&args.email_id, props).await {
-        Ok(Some(e)) => e,
-        Ok(None) => {
-            return Envelope::err(
-                command_name,
-                account,
-                XinErrorOut {
-                    kind: "jmapMethodError".to_string(),
-                    message: "email not found".to_string(),
-                    http: None,
-                    jmap: Some(json!({"type": "notFound"})),
-                },
-            )
-        }
-        Err(e) => return Envelope::err(command_name, account, e),
+    let max_body_value_bytes = args.max_body_bytes.unwrap_or(262_144);
+
+    let email = match args.format {
+        GetFormat::Full => match backend.get_email_full(&args.email_id, max_body_value_bytes).await {
+            Ok(Some(e)) => e,
+            Ok(None) => {
+                return Envelope::err(
+                    command_name,
+                    account,
+                    XinErrorOut {
+                        kind: "jmapMethodError".to_string(),
+                        message: "email not found".to_string(),
+                        http: None,
+                        jmap: Some(json!({"type": "notFound"})),
+                    },
+                )
+            }
+            Err(e) => return Envelope::err(command_name, account, e),
+        },
+        _ => match backend.get_email(&args.email_id, props).await {
+            Ok(Some(e)) => e,
+            Ok(None) => {
+                return Envelope::err(
+                    command_name,
+                    account,
+                    XinErrorOut {
+                        kind: "jmapMethodError".to_string(),
+                        message: "email not found".to_string(),
+                        http: None,
+                        jmap: Some(json!({"type": "notFound"})),
+                    },
+                )
+            }
+            Err(e) => return Envelope::err(command_name, account, e),
+        },
     };
 
     let raw = match args.format {
@@ -303,7 +317,16 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         _ => None,
     };
 
-    Envelope::ok(command_name, account, schema::get_email_data(&email, raw), Meta::default())
+    if args.format == GetFormat::Full {
+        let (data, warnings) = schema::get_email_full_data(&email, raw, max_body_value_bytes);
+        let mut meta = Meta::default();
+        if !warnings.is_empty() {
+            meta.warnings = Some(warnings);
+        }
+        Envelope::ok(command_name, account, data, meta)
+    } else {
+        Envelope::ok(command_name, account, schema::get_email_data(&email, raw), Meta::default())
+    }
 }
 
 pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {

@@ -55,6 +55,61 @@ impl Backend {
             })
     }
 
+    pub async fn get_email_full(
+        &self,
+        email_id: &str,
+        max_body_value_bytes: usize,
+    ) -> Result<Option<Email>, XinErrorOut> {
+        let mut request = self.j.client().build();
+
+        let get_request = request.get_email().ids([email_id]);
+        get_request.properties([
+            jmap_client::email::Property::Id,
+            jmap_client::email::Property::ThreadId,
+            jmap_client::email::Property::ReceivedAt,
+            jmap_client::email::Property::Subject,
+            jmap_client::email::Property::From,
+            jmap_client::email::Property::To,
+            jmap_client::email::Property::Cc,
+            jmap_client::email::Property::Bcc,
+            jmap_client::email::Property::Preview,
+            jmap_client::email::Property::HasAttachment,
+            jmap_client::email::Property::MailboxIds,
+            jmap_client::email::Property::Keywords,
+            jmap_client::email::Property::BodyStructure,
+            jmap_client::email::Property::BodyValues,
+            jmap_client::email::Property::TextBody,
+            jmap_client::email::Property::HtmlBody,
+            jmap_client::email::Property::Attachments,
+        ]);
+
+        get_request.arguments().body_properties([
+            jmap_client::email::BodyProperty::PartId,
+            jmap_client::email::BodyProperty::BlobId,
+            jmap_client::email::BodyProperty::Size,
+            jmap_client::email::BodyProperty::Name,
+            jmap_client::email::BodyProperty::Type,
+            jmap_client::email::BodyProperty::Disposition,
+            jmap_client::email::BodyProperty::Cid,
+        ]);
+        get_request
+            .arguments()
+            .fetch_text_body_values(true)
+            .fetch_html_body_values(true)
+            .max_body_value_bytes(max_body_value_bytes);
+
+        request
+            .send_single::<jmap_client::core::response::EmailGetResponse>()
+            .await
+            .map(|mut r| r.take_list().pop())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/get(full) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
     pub async fn thread_get(&self, thread_id: &str, include_attachments: bool) -> Result<Option<ThreadResult>, XinErrorOut> {
         let mut req = self.j.client().build();
 

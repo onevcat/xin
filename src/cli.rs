@@ -169,6 +169,10 @@ pub struct GetArgs {
     #[arg(long, value_enum, default_value_t = GetFormat::Metadata)]
     pub format: GetFormat,
 
+    /// Max bytes to fetch per body value (only used by --format full). Default: 262144.
+    #[arg(long = "max-body-bytes")]
+    pub max_body_bytes: Option<usize>,
+
     #[arg(long)]
     pub headers: Option<String>,
 }
