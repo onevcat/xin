@@ -21,6 +21,9 @@ env:
 
 steps:
   - name: alice-wait-visible-in-search
+    say:
+      - "Given an external email (bob -> alice) was injected via SMTP"
+      - "Then alice should be able to find it via search"
     env:
       XIN_BASIC_USER: alice
       XIN_BASIC_PASS: alice-pass
@@ -47,6 +50,9 @@ steps:
       threadId: /data/items/0/threadId
 
   - name: alice-get-full-default-limit
+    say:
+      - "When fetching full email with default maxBodyValueBytes (256KiB)"
+      - "Then html body should be marked truncated and warnings should be present"
     env:
       XIN_BASIC_USER: alice
       XIN_BASIC_PASS: alice-pass
@@ -57,13 +63,17 @@ steps:
         - --format
         - full
     expect:
-      - path: /data/email/emailId
+      - label: "emailId matches"
+        path: /data/email/emailId
         equals: ${emailId}
-      - path: /data/attachments/0/blobId
+      - label: "attachment blobId exists"
+        path: /data/attachments/0/blobId
         exists: true
-      - path: /data/body/htmlMeta/isTruncated
+      - label: "html is truncated"
+        path: /data/body/htmlMeta/isTruncated
         equals: true
-      - path: /meta/warnings/0
+      - label: "warnings mention truncation"
+        path: /meta/warnings/0
         contains: "body.html truncated"
 
   - name: alice-thread-attachments

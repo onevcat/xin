@@ -67,6 +67,7 @@ Each step is one `xin ...` subprocess call.
 
 Fields:
 - `name` (optional): display name.
+- `say` (optional): extra human-readable lines printed by the runner (BDD-style).
 - `env` (optional): step-level env overrides/extra vars (merged on top of case `env`).
 - `xin.args: ["messages", "search", ...]`: argv list.
 - `retry` (optional): retry the whole step until it passes.
@@ -74,6 +75,7 @@ Fields:
   - `sleepMs` (default 500)
 - `expectOk` (default true): require the envelope `ok=true`.
 - `expect`: assertions on JSON output using JSON pointers.
+  - `label` (optional): a short description shown on failure
   - `path: /data/items/0/subject`
   - `equals: <yaml value>`
   - `contains: <string>`

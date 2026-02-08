@@ -98,6 +98,10 @@ struct Step {
     #[serde(default)]
     name: Option<String>,
 
+    /// Extra human-readable lines to print in runner output for this step (BDD-style).
+    #[serde(default)]
+    say: Vec<String>,
+
     #[serde(default)]
     env: BTreeMap<String, String>,
 
@@ -141,6 +145,10 @@ struct XinStep {
 
 #[derive(Debug, Deserialize)]
 struct Assertion {
+    /// Optional human-readable label for nicer failure output.
+    #[serde(default)]
+    label: Option<String>,
+
     /// JSON pointer (e.g. /ok, /data/items/0/emailId)
     path: String,
 
@@ -287,6 +295,9 @@ fn run_case(xin_bin: &Path, case: &Case) -> Result<(), String> {
             .unwrap_or_else(|| format!("step-{}", idx + 1));
 
         eprintln!("==> {}", step_name);
+        for line in &step.say {
+            eprintln!("  {line}");
+        }
 
         run_step(xin_bin, &case.env, step, &mut ctx)
             .map_err(|e| format!("{step_name} failed: {e}"))?;
@@ -420,8 +431,14 @@ fn run_step_once(
 
     // Explicit assertions.
     for a in &step.expect {
-        assert_one(&value, a, ctx)
-            .map_err(|e| format!("assert {}: {e}\nstdout:\n{stdout}", a.path))?;
+        let label = a.label.as_deref().unwrap_or("");
+        let prefix = if label.is_empty() {
+            format!("assert {}", a.path)
+        } else {
+            format!("assert {} ({})", a.path, label)
+        };
+
+        assert_one(&value, a, ctx).map_err(|e| format!("{prefix}: {e}\nstdout:\n{stdout}"))?;
     }
 
     // Save variables.

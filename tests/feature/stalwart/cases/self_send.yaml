@@ -16,6 +16,9 @@ env:
 
 steps:
   - name: send-to-self
+    say:
+      - "Given alice is authenticated"
+      - "When alice sends a message to herself"
     xin:
       args:
         - send
@@ -30,6 +33,8 @@ steps:
       threadId: /data/draft/threadId
 
   - name: wait-visible-in-search
+    say:
+      - "Then the message should become searchable (eventual consistency)"
     retry:
       attempts: 30
       sleepMs: 500

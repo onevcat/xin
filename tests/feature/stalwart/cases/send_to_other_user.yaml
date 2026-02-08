@@ -14,6 +14,9 @@ env:
 
 steps:
   - name: alice-send-to-bob
+    say:
+      - "Given alice is authenticated"
+      - "When alice sends a message to bob"
     env:
       XIN_BASIC_USER: alice
       XIN_BASIC_PASS: alice-pass
@@ -28,6 +31,8 @@ steps:
         - "hello bob from alice"
 
   - name: bob-wait-visible-in-search
+    say:
+      - "Then bob should see the message appear (eventual consistency)"
     env:
       XIN_BASIC_USER: bob
       XIN_BASIC_PASS: bob-pass
@@ -41,13 +46,17 @@ steps:
         - --max
         - "10"
     expect:
-      - path: /data/items/0/subject
+      - label: "subject marker"
+        path: /data/items/0/subject
         contains: "[xin-case:${caseId}:${runId}]"
-      - path: /data/items/0/from/0/email
+      - label: "from is alice"
+        path: /data/items/0/from/0/email
         equals: "alice@example.org"
-      - path: /data/items/0/to/0/email
+      - label: "to is bob"
+        path: /data/items/0/to/0/email
         equals: "bob@example.org"
-      - path: /data/items/0/emailId
+      - label: "emailId exists"
+        path: /data/items/0/emailId
         exists: true
     save:
       bobEmailId: /data/items/0/emailId
