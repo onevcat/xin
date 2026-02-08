@@ -8,6 +8,7 @@ use crate::cli::{
     AttachmentArgs, GetArgs, GetFormat, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs,
     ThreadGetArgs,
 };
+use crate::sugar;
 use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -130,6 +131,12 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
                     .ok_or_else(|| XinErrorOut::usage("text must be string".to_string()))?
                     .to_string(),
             },
+            "body" => email::query::Filter::Body {
+                value: vv
+                    .as_str()
+                    .ok_or_else(|| XinErrorOut::usage("body must be string".to_string()))?
+                    .to_string(),
+            },
             "hasKeyword" => email::query::Filter::HasKeyword {
                 value: vv
                     .as_str()
@@ -141,6 +148,36 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
                     .as_str()
                     .ok_or_else(|| XinErrorOut::usage("notKeyword must be string".to_string()))?
                     .to_string(),
+            },
+            "after" => {
+                let s = vv
+                    .as_str()
+                    .ok_or_else(|| XinErrorOut::usage("after must be RFC3339 string".to_string()))?;
+                let dt = chrono::DateTime::parse_from_rfc3339(s)
+                    .map_err(|e| XinErrorOut::usage(format!("invalid after date: {e}")))?
+                    .with_timezone(&chrono::Utc);
+                email::query::Filter::After { value: dt }
+            }
+            "before" => {
+                let s = vv
+                    .as_str()
+                    .ok_or_else(|| XinErrorOut::usage("before must be RFC3339 string".to_string()))?;
+                let dt = chrono::DateTime::parse_from_rfc3339(s)
+                    .map_err(|e| XinErrorOut::usage(format!("invalid before date: {e}")))?
+                    .with_timezone(&chrono::Utc);
+                email::query::Filter::Before { value: dt }
+            }
+            "minSize" => email::query::Filter::MinSize {
+                value: vv
+                    .as_u64()
+                    .ok_or_else(|| XinErrorOut::usage("minSize must be number".to_string()))?
+                    as u32,
+            },
+            "maxSize" => email::query::Filter::MaxSize {
+                value: vv
+                    .as_u64()
+                    .ok_or_else(|| XinErrorOut::usage("maxSize must be number".to_string()))?
+                    as u32,
             },
             other => {
                 return Err(XinErrorOut::usage(format!(
@@ -178,7 +215,13 @@ pub async fn search(
             Ok(v) => v,
             Err(e) => return Envelope::err(command_name, account, e),
         },
-        None => json!({}),
+        None => match &args.query {
+            Some(q) if !q.trim().is_empty() => match sugar::compile_search_filter(q, &backend).await {
+                Ok(v) => v,
+                Err(e) => return Envelope::err(command_name, account, e),
+            },
+            _ => json!({}),
+        },
     };
 
     let (position, stable_filter_json) = match &args.page {

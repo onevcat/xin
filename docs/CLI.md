@@ -121,10 +121,12 @@ Query support policy (updated choice):
 - `--filter-json '<JMAP Email/query filter JSON>'`
 - This is the most precise and portable way to search across JMAP servers.
 
-2) **Provide a small xin query sugar** (optional, human-friendly)
+2) **Provide a small xin query sugar** (v0 implemented, human-friendly)
 - `<query>` is a xin-defined DSL that is intentionally **easy to map** to JMAP.
 - It is **not** meant to be compatible with Gmail query language.
 - Implementation: parse sugar → compile to the same JMAP filter JSON shape.
+- Note: because the CLI positional `<query>` is a single argument, multi-term queries should be quoted:
+  - `xin search "from:alice seen:false"`
 
 #### Sugar DSL v0 (must be 1:1 mappable)
 

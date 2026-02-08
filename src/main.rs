@@ -7,6 +7,7 @@ mod headers;
 mod jmap;
 mod output;
 mod schema;
+mod sugar;
 
 use clap::Parser;
 
