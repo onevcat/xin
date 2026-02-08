@@ -359,22 +359,24 @@ Naming / aliasing (fixed):
 
 - Convenience wrapper around `Mailbox/set` update.
 
-### 3.5 `xin labels delete <mailboxId> [--remove-emails]` (TBD)
+### 3.5 `xin labels delete <mailboxId> [--remove-emails]` (v0)
 
 - Destroys a mailbox via `Mailbox/set` destroy.
-- RFC 8621 has `onDestroyRemoveEmails` (Mailbox/set) semantics; we can expose it as `--remove-emails`.
+- If `--remove-emails` is set, xin sets `onDestroyRemoveEmails=true` (RFC 8621 `Mailbox/set`).
+- If `--remove-emails` is not set, xin uses the RFC default (`false`).
 
-### 3.6 `xin labels modify <mailboxId> ...` (TBD)
+### 3.6 `xin labels modify <mailboxId> [--name <str>] [--parent <mailboxId|null>] [--sort-order <int>] [--subscribe true|false]` (v0)
 
 Gmail’s “modify labels on threads” does not map to JMAP.
 
-In JMAP, `labels modify` should mean modifying **mailbox properties**, e.g.:
-- `--name`
-- `--parent`
-- `--sort-order`
-- `--subscribe true|false`
+In xin, `labels modify` changes **mailbox properties** via `Mailbox/set` update:
+- `--name`: maps to `Mailbox.name`
+- `--parent`: maps to `Mailbox.parentId` (use literal `null` to move to top-level)
+- `--sort-order`: maps to `Mailbox.sortOrder`
+- `--subscribe`: maps to `Mailbox.isSubscribed`
 
-We keep `modify` as a future umbrella command once the final flag set is agreed.
+Notes:
+- Servers may reject some changes based on ACLs; xin surfaces the standard SetError.
 
 ---
 
@@ -461,10 +463,26 @@ This yields a deterministic RFC5322/MIME structure while remaining fully express
 
 Drafts are emails in the Drafts mailbox.
 
-v0 notes:
-- `drafts create/update` uses `Email/set` with mailbox membership pointing to the Drafts mailbox (role=`drafts` when available).
-- `drafts send <draftId>` creates an `EmailSubmission` referencing the draft.
-- Attachments for drafts follow the same `uploadUrl` + `blobId` rules as `xin send`.
+#### `xin drafts list [--max N] [--page TOKEN]` (v0)
+- Implemented as `Email/query` with `inMailbox` set to the Drafts mailbox (resolved by role=`drafts` then name fallback).
+
+#### `xin drafts get <draftEmailId> [--format full|metadata|raw]` (v0)
+- Equivalent to `xin get`, but kept for parity/ergonomics.
+
+#### `xin drafts create --to ... --subject ... (--body ... | --body-file ... | --body-html ...) [--cc ...] [--bcc ...] [--attach ...] [--identity <id|email>]` (v0)
+- Uses `Email/set` create.
+- MUST include membership of the Drafts mailbox.
+- Body/attachments follow the exact same rules as `xin send` (uploadUrl + blobId; deterministic MIME layout).
+
+#### `xin drafts update <draftEmailId> [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--body ...|--body-file ...|--body-html ...] [--attach ...]` (TBD)
+- RFC allows updating an Email via `Email/set`, but patching bodyStructure is non-trivial.
+- v0 suggestion: allow updating headers/keywords/mailboxIds; leave body edits as TBD.
+
+#### `xin drafts delete <draftEmailId>...` (v0)
+- Removes the Email from the Drafts mailbox (and MAY destroy if no remaining mailboxes, server-defined).
+
+#### `xin drafts send <draftEmailId> [--identity <id|email>]` (v0)
+- Creates an `EmailSubmission` referencing the existing draft.
 
 ---
 
