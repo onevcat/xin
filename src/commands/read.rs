@@ -4,11 +4,13 @@ use jmap_client::email;
 use serde_json::{json, Value};
 
 use crate::backend::Backend;
-use crate::cli::{GetArgs, GetFormat, MessagesSearchArgs, SearchArgs};
+use crate::cli::{AttachmentArgs, GetArgs, GetFormat, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs, ThreadGetArgs};
 use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
 use crate::schema;
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 struct PageToken {
@@ -304,26 +306,125 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
     Envelope::ok(command_name, account, schema::get_email_data(&email, raw), Meta::default())
 }
 
-pub async fn thread_get(_args: &crate::cli::ThreadGetArgs) -> Envelope<Value> {
-    Envelope::err(
-        "thread.get",
-        None,
-        XinErrorOut::not_implemented("thread get not implemented yet"),
+pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
+    let command_name = "thread.get";
+    let account = None;
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let result = match backend.thread_get(&args.thread_id, false).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut {
+                    kind: "jmapMethodError".to_string(),
+                    message: "thread not found".to_string(),
+                    http: None,
+                    jmap: Some(json!({"type": "notFound"})),
+                },
+            )
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    Envelope::ok(
+        command_name,
+        account,
+        schema::thread_get_data(&result.thread_id, &result.email_ids, &result.emails),
+        Meta::default(),
     )
 }
 
-pub async fn thread_attachments(_args: &crate::cli::ThreadAttachmentsArgs) -> Envelope<Value> {
-    Envelope::err(
-        "thread.attachments",
-        None,
-        XinErrorOut::not_implemented("thread attachments not implemented yet"),
+pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value> {
+    let command_name = "thread.attachments";
+    let account = None;
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let result = match backend.thread_get(&args.thread_id, true).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut {
+                    kind: "jmapMethodError".to_string(),
+                    message: "thread not found".to_string(),
+                    http: None,
+                    jmap: Some(json!({"type": "notFound"})),
+                },
+            )
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    Envelope::ok(
+        command_name,
+        account,
+        schema::thread_attachments_data(&result.thread_id, &result.emails),
+        Meta::default(),
     )
 }
 
-pub async fn attachment_download(_args: &crate::cli::AttachmentArgs) -> Envelope<Value> {
-    Envelope::err(
-        "attachment",
-        None,
-        XinErrorOut::not_implemented("attachment download not implemented yet"),
+pub async fn attachment_download(args: &AttachmentArgs) -> Envelope<Value> {
+    let command_name = "attachment";
+    let account = None;
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let bytes = match backend.download_blob(&args.blob_id).await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let out_path: PathBuf = if let Some(out) = &args.out {
+        out.into()
+    } else if let Some(name) = &args.name {
+        name.into()
+    } else {
+        args.blob_id.clone().into()
+    };
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                return Envelope::err(
+                    command_name,
+                    account,
+                    XinErrorOut::usage(format!("failed to create output dir: {e}")),
+                );
+            }
+        }
+    }
+
+    if let Err(e) = fs::write(&out_path, &bytes) {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage(format!("failed to write output file: {e}")),
+        );
+    }
+
+    Envelope::ok(
+        command_name,
+        account,
+        json!({
+            "emailId": args.email_id,
+            "blobId": args.blob_id,
+            "out": out_path.to_string_lossy(),
+            "bytes": bytes.len(),
+        }),
+        Meta::default(),
     )
 }
