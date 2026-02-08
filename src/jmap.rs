@@ -17,7 +17,7 @@ impl XinJmap {
         trusted_hosts.extend(cfg.follow_redirect_hosts.iter().cloned());
 
         let client = jmap_client::client::Client::new()
-            .credentials(cfg.token.clone())
+            .credentials(cfg.credentials())
             .follow_redirects(trusted_hosts)
             .connect(&cfg.base_url)
             .await

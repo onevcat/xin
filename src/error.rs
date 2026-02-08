@@ -20,6 +20,15 @@ impl XinErrorOut {
         }
     }
 
+    pub fn config(message: impl Into<String>) -> Self {
+        Self {
+            kind: "xinConfigError".to_string(),
+            message: message.into(),
+            http: None,
+            jmap: None,
+        }
+    }
+
     #[allow(dead_code)]
     pub fn usage(message: impl Into<String>) -> Self {
         Self {

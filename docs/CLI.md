@@ -61,6 +61,19 @@ Config should support multiple accounts:
 }
 ```
 
+### Environment
+
+Required connection info:
+
+- `XIN_BASE_URL` (preferred) or `XIN_SESSION_URL`
+- Authentication (choose one)
+- `XIN_TOKEN` or `XIN_TOKEN_FILE` (Bearer)
+- `XIN_BASIC_USER` and `XIN_BASIC_PASS` (or `XIN_BASIC_PASS_FILE`) (Basic)
+
+Optional:
+
+- `XIN_TRUST_REDIRECT_HOSTS` (comma-separated allowlist for session URL redirects)
+
 ---
 
 ## 1) Read
