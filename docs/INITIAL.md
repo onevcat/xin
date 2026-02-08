@@ -1,45 +1,23 @@
-# xin (信) — Initial Spec
+# xin（信）— JMAP CLI 对标 `gog gmail` 的初始规格
 
-This document:
+目标很明确：
 
-1) Surveys `gog gmail` command surface (what exists today for Gmail)
-2) Proposes a `xin` command surface that maps 1:1 (where sensible)
-3) Analyzes Gmail vs JMAP API differences: gaps, and opportunities to exceed `gog`/Gmail
+- **`gog gmail` 负责 Gmail**（保持不动）
+- **`xin` 负责 JMAP**（Fastmail 起步，但做成通用 JMAP CLI）
+- `xin` 的命令接口尽量 **对标 / 类似 `gog gmail`**，让人和 agent 都能无脑迁移使用习惯
 
-> Scope note: xin’s goal is **not** to replace a full email client UI.
-> It is an automation CLI with excellent defaults for agents.
-
----
-
-## 0. Terminology
-
-- **Gmail adapter**: uses `gog` underneath.
-- **JMAP adapter**: talks to JMAP servers (Fastmail first), via a maintained JMAP client library.
-- **Normalized objects**: xin returns a unified schema (Message/Thread/Mailbox/Label) regardless of provider.
+> xin 不是 gog 的替代，也不是统一多邮箱的 wrapper。
+> “汇总多个邮箱”可以在未来做一个更上层的 orchestrator（例如另一个命令/脚本），但不放在 xin v1 的 scope。
 
 ---
 
-## 1) `gog gmail` command surface (survey)
+## 1. 我们对标的 `gog gmail` 命令面（基线）
 
-`gog` provides these Gmail top-level commands (v0.9.0).
+（以下基于本机 `gog` v0.9.0 帮助输出整理）
 
-Common flags worth mirroring in xin:
-
-- Output:
-  - `--json`: JSON to stdout (script/agent friendly)
-  - `--plain`: stable TSV output (no colors)
-- Safety:
-  - `--force`: skip confirmations for destructive commands
-  - `--no-input`: never prompt; fail instead
-- Auth/account selection:
-  - `--account <email>`
-  - `--client <oauth-client-name>`
-
-### Read
-- `gog gmail search <query> --max N [--page TOKEN] [--oldest]`
-  - Search **threads** using Gmail query syntax.
-- `gog gmail messages search <query> --max N`
-  - Search **messages** (per-email, ignoring threading).
+### 1.1 Read
+- `gog gmail search <query> --max N [--page TOKEN] [--oldest]`  （threads）
+- `gog gmail messages search <query> --max N`  （messages）
 - `gog gmail get <messageId> [--format full|metadata|raw] [--headers ...]`
 - `gog gmail thread get <threadId> [--download] [--full] [--out-dir ...]`
 - `gog gmail thread attachments <threadId>`
@@ -47,186 +25,163 @@ Common flags worth mirroring in xin:
 - `gog gmail url <threadId>...`
 - `gog gmail history [--since HISTORY_ID] [--max N] [--page TOKEN]`
 
-### Organize
+### 1.2 Organize
 - `gog gmail thread modify <threadId> --add LABELS --remove LABELS`
 - `gog gmail batch modify <messageId>... --add LABELS --remove LABELS`
-- `gog gmail batch delete <messageId>...` (permanent delete)
+- `gog gmail batch delete <messageId>...`（永久删除）
 
-### Labels
+### 1.3 Labels
 - `gog gmail labels list|get|create`
 - `gog gmail labels modify <threadId>... --add ... --remove ...`
 
-### Write
-- `gog gmail send --to ... --subject ... --body/--body-file/--body-html ... [--attach ...] [--thread-id ...] [--reply-to-message-id ...] [--reply-all] ...`
+### 1.4 Write
+- `gog gmail send ...`（reply/thread/reply-all/attach 等）
 - `gog gmail drafts list|get|create|update|delete|send`
 
-### Tracking (gog feature)
-- `gog gmail track setup|opens|status`
+### 1.5 额外能力（Gmail-specific）
+- `gog gmail track setup|opens|status`（gog 自己做的 tracking feature）
+- `gog gmail settings ...`（filters/watch/delegates/sendas/vacation/forwarding…）
 
-### Settings/Admin (Gmail-specific)
-- `gog gmail settings filters list|get|create|delete`
-- `gog gmail settings watch start|status|renew|stop|serve`
-- `gog gmail settings delegates list|get|add|remove`
-- `gog gmail settings forwarding list|get|create|delete`
-- `gog gmail settings autoforward get|update`
-- `gog gmail settings sendas list|get|create|verify|delete|update`
-- `gog gmail settings vacation get|update`
-
-Notes:
-- These are largely **Gmail-only admin surfaces**. xin should support them under `xin gmail ...` but not attempt to standardize them across providers in v1.
-- Portable “rules” should be client-side (xin rules engine) rather than server-side filters.
+这些 Gmail 专属的 admin 面，xin **不对标**（因为 JMAP 没有跨服务商的等价物）。
 
 ---
 
-## 2) Proposed `xin` CLI surface (agent-first)
+## 2. `xin` 的命令面：对标 `gog gmail`，但面向 JMAP
 
-### 2.1 Core: provider-agnostic commands
+### 2.1 全局设计原则（agent-first）
 
-These are the commands an agent/human uses day-to-day:
+- 默认输出：**稳定 JSON**（便于 agent 解析）
+- 安全：默认只读；会改动状态的命令需要显式执行（并提供 `--dry-run` 和/或 `--yes`）
+- 认证：
+  - MVP：支持 Fastmail API token / app password（Basic/OAuth token 视服务端）
+  - 通用：后续加 OAuth（但不阻塞 v0）
+- 配置：支持多 account（多个 JMAP server/多个邮箱），但 **xin 本身只负责 JMAP**
 
-- `xin check`  
-  Summarize all configured accounts (Gmail + JMAP). Output normalized JSON by default.
+### 2.2 具体命令（建议尽量贴近 gog gmail 的语义）
 
-- `xin inbox list [--account <name>|--all] [--unread] [--max N]`
-- `xin thread list/get <id>`
-- `xin message get <id>`
+> 下面以“对标”角度列出：gog 的命令 → xin 里的对应命令。
 
-- `xin archive <id>...`  
-  Default behavior: remove from inbox (never delete).
+#### Read
 
-- `xin read <id>...`  
-  Marks as read.
+1) `gog gmail search`（threads 搜索）
+- **xin 对标**：`xin search <query> [--max N] [--page TOKEN] [--oldest]`
+- 说明：
+  - Gmail 的 `<query>` 是 Gmail query language；
+  - xin 的 `<query>` 应该是 **portable filter DSL**（或 `--filter-json` 直接传 JMAP filter）。
 
-- `xin reply <id> --body-file ... [--reply-all] [--attach ...]`
-- `xin send --to ... --subject ... --body-file ... [--attach ...]`
+2) `gog gmail messages search`（messages 搜索）
+- **xin 对标**：`xin messages search <query> ...`
 
-- `xin trash <id>...` (optional; requires `--yes`)
+3) `gog gmail get <messageId>`
+- **xin 对标**：`xin get <emailId> [--format full|metadata|raw]`
+- JMAP 中实体通常是 `Email`；必要时 `--raw` 输出 JMAP 原始对象。
 
-- `xin rules test --rules rules.yaml [--max N]`  
-  Explain classification (must-do vs archive) without making changes.
+4) `gog gmail thread get <threadId>`
+- **xin 对标**：`xin thread get <threadId> [--full]`
+- 风险：并非所有 JMAP server 都把 thread 做得和 Gmail 一样强；需要 capability 检测与 fallback。
 
-### 2.2 Provider-specific escape hatches (parity with gog)
+5) `gog gmail attachment / thread attachments`
+- **xin 对标**：
+  - `xin thread attachments <threadId>`
+  - `xin attachment <emailId> <blobId> [--out ...]`
+- JMAP 通常是 blob/download URL 模型。
 
-Because Gmail and JMAP differ, xin should support:
+6) `gog gmail url <threadId>...`
+- **xin 对标**：`xin url <id>...`（可选）
+- 说明：JMAP 标准不保证 webmail URL，Fastmail 可能可以拼，但其他 provider 未必。
 
-- `xin gmail ...` : a thin wrapper that maps to `gog gmail ...` semantics
-- `xin jmap ...`  : direct JMAP method-level calls for power users (JSON in/out)
+7) `gog gmail history`
+- **xin 对标**：`xin history [--since <state>] [--max N] [--page TOKEN]`
+- 对应：JMAP 的 `Email/changes`（或相关 changes）提供增量变更；用 state token。
 
-This keeps xin useful for *all* providers while retaining deep capability when needed.
+#### Organize
 
----
+8) `gog gmail thread modify --add/--remove LABELS`
+- **xin 对标**：`xin thread modify <threadId> --add <tags> --remove <tags>`
+- 映射：
+  - Gmail label ≈ JMAP keyword（例如 `$seen/$flagged`）+ mailbox membership
+  - xin 需要提供统一抽象：`INBOX/ARCHIVE/TRASH/UNREAD/STARRED` 等。
 
-## 3) Mapping: `gog gmail` → `xin`
+9) `gog gmail batch modify <messageId>...`
+- **xin 对标**：`xin batch modify <emailId>... --add ... --remove ...`
 
-This section is intentionally “1:1-ish” with `gog gmail`, so we don’t lose power.
+10) `gog gmail batch delete`（永久删除）
+- **xin 对标**：`xin batch delete <emailId>...`（默认不鼓励；更推荐 `trash`）
+- v0 可先只实现 `trash`，把 delete 放到后续。
 
-| `gog gmail` | What it does | `xin` equivalent | Notes |
-|---|---|---|---|
-| `search` (threads) | Gmail query on threads | `xin search --gmail-query ...` or `xin inbox list --filter ...` | Gmail query syntax is Gmail-only; xin may support both `--gmail-query` and normalized filters |
-| `messages search` | Gmail query on messages | `xin search --scope message --gmail-query ...` | |
-| `get <messageId>` | Fetch message | `xin message get <id>` | Normalized schema; provider raw via `--raw` |
-| `thread get <threadId>` | Fetch full thread | `xin thread get <id>` | JMAP Thread support varies; fallback to grouping by headers |
-| `attachment` | Download attachment | `xin attachment get <messageId> <attachmentId>` | JMAP uses blob/download URLs |
-| `url` | Gmail web URL | `xin open <id>` | For JMAP providers, webmail URL may be unavailable |
-| `history` | Gmail incremental history | `xin sync status` / `xin events` | JMAP has `*/changes` APIs; can approximate |
-| `thread modify --add/--remove` | Label changes on thread | `xin tag add/remove <threadId>` / `xin archive` | Gmail labels vs JMAP keywords/mailboxes |
-| `batch modify` | Label changes on messages | `xin tag add/remove <messageId>...` | |
-| `batch delete` | Permanent delete | `xin delete` (discouraged) | Prefer `trash` |
-| `labels list/get/create` | Gmail labels | `xin labels list/get/create` | For JMAP: Mailboxes + keywords; map to a unified concept |
-| `send` | Send mail | `xin send` | JMAP send is draft+submission; Gmail uses Gmail API |
-| `drafts ...` | Draft ops | `xin drafts ...` | JMAP has draft mailbox; standardize |
-| `track ...` | Open tracking (gog feature) | `xin track ...` (optional) | Provider-independent feature; xin could exceed here |
-| `settings filters` | Manage Gmail filters | `xin gmail filters ...` | No portable equivalent; JMAP servers may expose Sieve via other protocols |
-| `settings watch ...` | Gmail Pub/Sub watch | `xin watch ...` | JMAP has WebSocket push (RFC 8887) on some servers; can exceed portability |
+#### Labels
 
----
+11) `gog gmail labels list|get|create`
+- **xin 对标**：`xin labels list|get|create`
+- 映射：
+  - Gmail label
+  - JMAP: `Mailbox`（文件夹）+ `keyword`（标签）
+- 建议：xin 的 `labels` 主要对标“mailboxes”，keywords 作为 `tags/keywords` 一套。
 
-## 4) Gmail API vs JMAP: differences, gaps, opportunities
+12) `gog gmail labels modify ...`
+- **xin 对标**：`xin labels modify <id>... --add ... --remove ...`
 
-### 4.1 Data model
+#### Write
 
-**Gmail**
-- First-class: `Thread`, `Message`, **Labels** (INBOX, UNREAD, STARRED, etc)
-- Strong Gmail-only features: Categories (Promotions/Updates), “importance”, rich web URLs
+13) `gog gmail send ...`
+- **xin 对标**：`xin send ...`（支持 `--reply-to-email-id` / `--thread-id` / `--reply-all`）
+- JMAP 通常为：`Email/set` 生成 draft + `EmailSubmission/set` 提交发送。
 
-**JMAP**
-- First-class: `Email`, `Mailbox`, `Thread` (standard but server support varies), `EmailSubmission`
-- Tags are usually **keywords** (e.g. `$seen`, `$flagged`), plus mailbox membership
-
-Implications for xin:
-- Provide normalized actions: **archive/read/trash** that map correctly per provider.
-- Provide provider-specific query modes when necessary.
-
-### 4.2 Query/search
-
-- Gmail: powerful free-form query language (`from:`, `to:`, `newer_than:`, etc)
-- JMAP: structured filters (JSON). Some servers provide full-text search, but features vary.
-
-Xin approach:
-- Support a small **portable filter DSL** (from/to/subject/hasAttachment/unread/inbox) 
-- Plus `--gmail-query` escape hatch; plus `--jmap-filter-json` for power users
-
-### 4.3 Threads
-
-- Gmail threads are always present.
-- JMAP threading depends on server implementation and/or how it groups; may differ.
-
-Xin approach:
-- Keep both `messageId` and `threadId` in normalized schema.
-- If JMAP Thread is missing/unreliable, approximate using `Message-ID`, `In-Reply-To`, `References`.
-
-### 4.4 Incremental sync / events
-
-- Gmail: `historyId` + watch via Pub/Sub.
-- JMAP: `*/changes` and (optionally) push via WebSocket (RFC 8887) on supporting servers.
-
-Opportunities:
-- xin can implement **portable polling** + optionally **push** where available.
-- This can become *better than gog* for multi-provider “check all inboxes” workflows.
-
-### 4.5 Server-side rules
-
-- Gmail: filters/settings management via Gmail API (gog exposes some).
-- JMAP: no universal “filters” spec; providers may support Sieve/ManageSieve or proprietary endpoints.
-
-Xin stance:
-- Don’t try to standardize server-side filtering initially.
-- Instead: provide a powerful **client-side rules engine** (classify + actions) that works everywhere.
-
-### 4.6 Attachments
-
-- Gmail: attachmentId per part; download via Gmail API.
-- JMAP: blobs/download URLs; can be simpler once normalized.
-
-### 4.7 Things we likely *cannot* portably implement
-
-- Gmail Categories/Smart features (promotions/updates importance) in a portable way.
-- Gmail-specific settings admin surfaces (delegates, send-as settings, vacation responder) across all providers.
-
-We can still support them as `xin gmail ...` subcommands.
-
-### 4.8 Things xin can plausibly *exceed*
-
-- Multi-account, multi-provider unified checking and summarization.
-- Deterministic, stable JSON output designed for LLM/agent consumption.
-- A rules engine that works for both Gmail and JMAP providers.
-- Optional portability of “watch” via polling + JMAP push where supported.
-- Provider-independent open tracking (similar to gog’s, but generalized).
+14) `gog gmail drafts ...`
+- **xin 对标**：`xin drafts list|get|create|update|delete|send`
+- drafts 在 JMAP 里一般是一个 mailbox（Drafts）。
 
 ---
 
-## 5) MVP checklist (to validate end-to-end)
+## 3. Gmail vs JMAP：哪些我们做不到“等价”，哪些可能更强
 
-1) Gmail adapter: wrap `gog gmail search` and normalize output
-2) JMAP adapter (Fastmail): list inbox/unread, fetch subject/from/date/snippet
-3) `xin check`: merges and ranks “must handle” items (Jira/GitHub/UWV)
-4) `xin archive`: safe default (remove from inbox), `--dry-run` support
-5) Rules config file (`rules.yaml`) for must-do classification
+### 3.1 难以等价对标的点（限制）
+
+- **Gmail query language**：JMAP 的 filter 是结构化 JSON；不同 provider 的全文检索能力差异大。
+- **Gmail Categories/Importance**：Promotions/Updates/Primary、Important 等信号不可移植。
+- **Gmail settings/admin**：filters/watch(PubSub)/delegates/sendas/vacation/forwarding 等没有通用 JMAP 等价。
+- **Gmail web URL**：JMAP 不保证提供 webmail URL。
+
+### 3.2 我们可能超越的点（机会）
+
+- **批处理能力更一致**：JMAP 设计本来就鼓励一次 request 做多个变更（methodCalls/backreference）。
+- **增量同步更“标准化”**：`*/changes` +（部分支持）WebSocket push（RFC 8887）比 Gmail watch 更容易做成通用接口。
+- **输出更 agent-friendly**：从第一天就定义稳定 JSON schema（而不是“人类 CLI 输出”再反解析）。
+- **跨 provider 的一致语义**：虽然 xin 只做 JMAP，但在 JMAP 世界内部（Fastmail/Stalwart/Cyrus/James…）我们可以做到一致。
 
 ---
 
-## 6) Open questions
+## 4. 开发计划（以“gog gmail parity”为导向）
 
-- Normalized ID format: e.g. `gmail:thread:19c3...` vs `jmap:email:abc...`
-- Where to store credentials/config (OS keychain vs file + env var)
-- Library choice for JMAP (Go vs Rust) based on licensing/coverage/maintenance
+### Phase 0 — 选型与对齐
+- 选一个成熟 JMAP client library（Go 或 Rust）
+- 验证覆盖：`Email/query`, `Email/get`, `Email/set`, `Mailbox/get`, `EmailSubmission/set`, `*/changes`
+- 设计 xin 的稳定 JSON 输出 schema（threads/emails/mailboxes/attachments/errors）
+
+### Phase 1 — Read parity（最先让 agent 能“看见”邮件）
+- `xin search`（支持简易 DSL + `--filter-json`）
+- `xin messages search`
+- `xin get` / `xin thread get`
+- `xin attachment` / `xin thread attachments`
+
+### Phase 2 — Organize parity（安全地改状态）
+- `xin thread modify` / `xin batch modify`
+- `xin archive`（作为 `modify --remove INBOX` 的 sugar）
+- `xin read`（作为 `modify --add $seen` 的 sugar）
+- `xin trash`（移动到 Trash mailbox）
+
+### Phase 3 — Write parity（发信闭环）
+- `xin drafts ...`
+- `xin send`（含 reply / reply-all / thread）
+
+### Phase 4 — History / watch（可选增强）
+- `xin history`（`*/changes`）
+- `xin watch`（如果 provider 支持 RFC 8887 或其它 push，做成可选模块；不强求）
+
+---
+
+## 5. 明确不做（v1）
+
+- Gmail-only settings/admin 的对标
+- “统一检查 Gmail + JMAP 并汇总”的上层 orchestrator（可以另开一个项目/命令做）
+- 试图复刻 Gmail 的类别/重要性模型

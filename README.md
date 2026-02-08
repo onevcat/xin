@@ -1,22 +1,21 @@
-# xin (信)
+# xin（信）
 
-> Agent-first multi-mailbox CLI.
+> Agent-first JMAP CLI.
 >
-> Goal: keep using `gog` for Gmail, use JMAP for Fastmail/other JMAP providers, and provide a single interface for agents/humans to **check, summarize, archive, read, reply, send**.
+> **Design goal:** `xin` is to JMAP email what `gog gmail` is to Gmail.
+> It is **not** a multi-provider wrapper and **not** a replacement for `gog`.
 
-## Why
+## What it is
 
-- Gmail automation is great via `gog`.
-- Fastmail (custom domain) has strong JMAP support.
-- We want one command to check **all** inboxes and output a unified summary (JSON-first).
+- A command-line tool that talks to **JMAP servers** (Fastmail first; any standard JMAP server later)
+- Command surface intentionally **mirrors** `gog gmail` for usability and muscle memory
+- Output is **JSON-first** and stable for agents
 
-## Principles
+## What it is not
 
-- **Agent-first**: stable JSON output by default; human-friendly output via `--pretty`.
-- **Safe by default**: read-only unless `--yes` / `--force` (or explicit action commands).
-- **Provider adapters**: Gmail adapter wraps `gog`; JMAP adapter uses a maintained JMAP library.
-- **Unified core actions**: read / archive / reply / send (optional trash).
+- Not a Gmail tool
+- Not a unified “check all inboxes” tool (that can be a separate orchestrator later)
 
 ## Docs
 
-- [Initial spec: gog parity + Gmail vs JMAP analysis](docs/INITIAL.md)
+- [Initial spec: gog gmail parity mapping + Gmail vs JMAP differences](docs/INITIAL.md)
