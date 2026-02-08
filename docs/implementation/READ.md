@@ -29,42 +29,25 @@ xin should cache Session per account for a short time (TBD).
 
 ---
 
-## 1) `xin labels list` / mailbox resolution helper
+Mailbox resolution (role/name → mailboxId) is shared across commands.
 
-Many read commands need mailbox ids.
-
-Call `Mailbox/get` with `ids: null` to fetch all mailboxes, then build:
-- `role -> mailboxId`
-- `name -> mailboxId`
-
-JMAP request:
-
-```json
-{
-  "using": [
-    "urn:ietf:params:jmap:core",
-    "urn:ietf:params:jmap:mail"
-  ],
-  "methodCalls": [
-    ["Mailbox/get", {"accountId": "A", "ids": null}, "c1"]
-  ]
-}
-```
+- For the helper used by archive/trash/modify, see: `docs/implementation/ORGANIZE.md`.
+- For mailbox CRUD/list implementations, see: `docs/implementation/MAILBOXES.md`.
 
 ---
 
-## 2) `xin search` (thread-like results)
+## 1) `xin search` (thread-like results)
 
 CLI contract says v0 uses:
 - `Email/query` with `collapseThreads=true` by default
 - sort default: `receivedAt desc`
 
-### 2.1 Compile filter
+### 1.1 Compile filter
 
 - If user provides `--filter-json`, parse it.
 - Otherwise parse sugar DSL and compile to `FilterCondition` / `FilterOperator`.
 
-### 2.2 Email/query
+### 1.2 Email/query
 
 Request:
 
@@ -88,7 +71,7 @@ Response gives:
 - `ids`: emailIds (representative per thread when collapseThreads=true)
 - `position`, `total` (optional)
 
-### 2.3 Email/get to hydrate summaries
+### 1.3 Email/get to hydrate summaries
 
 Immediately follow with `Email/get` for the returned ids.
 
@@ -119,14 +102,14 @@ Map each Email to `search.items[]`:
 - `emailId` = `id`
 - `unread` = absence of `$seen` in `keywords`
 
-### 2.4 Optional: SearchSnippet/get
+### 1.4 Optional: SearchSnippet/get
 
 If we want better snippet highlighting (TBD), use `SearchSnippet/get` with the same filter.
 This is optional and server may return `unsupportedFilter`.
 
 ---
 
-## 3) `xin messages search`
+## 2) `xin messages search`
 
 Same as `xin search` but with:
 - `collapseThreads=false`
@@ -136,7 +119,7 @@ Output reuses the same item shape (SCHEMA.md §4.2).
 
 ---
 
-## 4) `xin get <emailId>`
+## 3) `xin get <emailId>`
 
 Use `Email/get`.
 
@@ -212,7 +195,7 @@ Attachments (v0):
 
 ---
 
-## 5) `xin thread get <threadId>`
+## 4) `xin thread get <threadId>`
 
 Use `Thread/get` to get `emailIds`, then `Email/get`.
 
@@ -230,15 +213,15 @@ Map to `SCHEMA.md §4.4`.
 
 ---
 
-## 6) Attachments list + download
+## 5) Attachments list + download
 
-### 6.1 List attachments for a thread
+### 5.1 List attachments for a thread
 
 Either:
 - Use `xin thread get` with `attachments` properties, or
 - Call `Email/get` with `attachments` and `bodyProperties`.
 
-### 6.2 Download attachment
+### 5.2 Download attachment
 
 Use Session `downloadUrl` template (RFC 8620 §6.2) with:
 - `accountId`, `blobId`, `type`, `name`

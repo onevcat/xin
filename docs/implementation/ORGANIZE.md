@@ -14,6 +14,33 @@ References:
 
 ---
 
+## 0) Mailbox resolution helper (role/name → mailboxId)
+
+Organize commands need mailbox ids (inbox/trash/junk/etc). Use `Mailbox/get` with `ids: null` to fetch all mailboxes, then build:
+
+- `role -> mailboxId`
+- `name -> mailboxId`
+
+JMAP request:
+
+```json
+{
+  "using": [
+    "urn:ietf:params:jmap:core",
+    "urn:ietf:params:jmap:mail"
+  ],
+  "methodCalls": [
+    ["Mailbox/get", {"accountId": "A", "ids": null}, "c1"]
+  ]
+}
+```
+
+Notes:
+- Role/name resolution order is defined in `docs/CLI.md`.
+- Mailbox command implementations live in `MAILBOXES.md` (this section is just the shared helper).
+
+---
+
 ## 1) Email-level modify (keywords/mailboxIds)
 
 Use `Email/set` update with patch syntax (RFC 8620 §5.3).
