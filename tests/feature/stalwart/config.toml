@@ -14,11 +14,33 @@ bind = ["0.0.0.0:39090"]
 protocol = "http"
 tls.implicit = false
 
-# SMTP listener (for fixture injection later)
+# SMTP listener (fixture injection)
 [server.listener."smtp"]
 bind = ["0.0.0.0:32525"]
 protocol = "smtp"
 tls.implicit = false
+
+# SMTP AUTH settings for fixture injection (STARTTLS + AUTH PLAIN/LOGIN)
+# Local-only harness; do not reuse this config for a real server.
+[session.auth]
+mechanisms = [
+  { if = "listener == 'smtp' && is_tls", then = "[plain, login]" },
+  { else = false }
+]
+directory = [
+  { if = "listener == 'smtp'", then = "'internal'" },
+  { else = false }
+]
+require = [
+  { if = "listener == 'smtp'", then = true },
+  { else = false }
+]
+allow-plain-text = false
+must-match-sender = true
+
+[session.auth.errors]
+total = 3
+wait = "1s"
 
 [storage]
 data = "rocksdb"

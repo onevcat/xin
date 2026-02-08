@@ -1,6 +1,14 @@
 id: self_send
 requiresFresh: false
 
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
 env:
   XIN_BASE_URL: http://127.0.0.1:39090
   XIN_BASIC_USER: alice

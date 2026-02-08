@@ -32,9 +32,56 @@ struct Case {
     requires_fresh: bool,
 
     #[serde(default)]
+    seed: Option<Seed>,
+
+    #[serde(default)]
     env: BTreeMap<String, String>,
 
     steps: Vec<Step>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Seed {
+    /// Domain to create (e.g. example.org)
+    domain: String,
+
+    /// User principals to create.
+    users: Vec<SeedUser>,
+
+    /// Optional SMTP injections (fixtures).
+    #[serde(default, rename = "smtpInject")]
+    smtp_inject: Vec<SmtpInject>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SeedUser {
+    user: String,
+    pass: String,
+
+    /// Optional explicit email address. Default: {user}@{domain}
+    #[serde(default)]
+    email: Option<String>,
+
+    #[serde(default)]
+    roles: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SmtpInject {
+    #[serde(rename = "authUser")]
+    auth_user: String,
+
+    #[serde(rename = "authPass")]
+    auth_pass: String,
+
+    #[serde(rename = "mailFrom")]
+    mail_from: String,
+
+    #[serde(rename = "rcptTo")]
+    rcpt_to: Vec<String>,
+
+    #[serde(rename = "emlFile")]
+    eml_file: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,8 +167,19 @@ fn main() {
 
     let fresh = cli.fresh || case.requires_fresh;
 
-    ensure_stalwart(&root_dir.join(&cli.stalwart_dir), fresh)
+    let stalwart_dir = root_dir.join(&cli.stalwart_dir);
+    ensure_stalwart(&stalwart_dir, fresh)
         .unwrap_or_else(|e| fatal(&format!("stalwart setup failed: {e}")));
+
+    if let Some(seed) = &case.seed {
+        seed_stalwart(&stalwart_dir, seed)
+            .unwrap_or_else(|e| fatal(&format!("stalwart seed failed: {e}")));
+    } else {
+        // Back-compat: if no seed block is provided, run the legacy seed script.
+        let seed_script = stalwart_dir.join("scripts/seed.sh");
+        run_cmd(Command::new(&seed_script).current_dir(&stalwart_dir))
+            .unwrap_or_else(|e| fatal(&format!("seed.sh failed: {e}")));
+    }
 
     // Ensure xin is built (debug) so we can execute it by path.
     run_cmd(
@@ -179,9 +237,10 @@ fn ensure_stalwart(stalwart_dir: &Path, fresh: bool) -> Result<(), String> {
         }
         let up = stalwart_dir.join("scripts/up.sh");
         run_cmd(Command::new(&up).current_dir(stalwart_dir))?;
+        return Ok(());
     }
 
-    // Try seed. If it fails (server down), try up then seed.
+    // Non-fresh: if the server is down, try starting it.
     let seed = stalwart_dir.join("scripts/seed.sh");
     let seed_status = Command::new(&seed)
         .current_dir(stalwart_dir)
@@ -192,18 +251,10 @@ fn ensure_stalwart(stalwart_dir: &Path, fresh: bool) -> Result<(), String> {
         return Ok(());
     }
 
-    if !fresh {
-        let up = stalwart_dir.join("scripts/up.sh");
-        run_cmd(Command::new(&up).current_dir(stalwart_dir))?;
+    let up = stalwart_dir.join("scripts/up.sh");
+    run_cmd(Command::new(&up).current_dir(stalwart_dir))?;
 
-        run_cmd(Command::new(&seed).current_dir(stalwart_dir))?;
-        return Ok(());
-    }
-
-    Err(format!(
-        "seed.sh failed with exit code {:?}",
-        seed_status.code()
-    ))
+    Ok(())
 }
 
 fn run_step(
@@ -371,6 +422,174 @@ fn run_cmd(cmd: &mut Command) -> Result<(), String> {
     } else {
         Err(format!("command failed with exit code {status}"))
     }
+}
+
+// (no cmd_output helper; keep warnings clean)
+
+fn seed_stalwart(stalwart_dir: &Path, seed: &Seed) -> Result<(), String> {
+    // Hard-coded local harness constants (kept in sync with tests/feature/stalwart).
+    let base_url = "http://127.0.0.1:39090";
+    let api = format!("{base_url}/api");
+    let admin_user = "admin";
+    let admin_pass = "xin-admin-pass";
+
+    wait_ready(&api, admin_user, admin_pass)?;
+
+    create_domain(&api, admin_user, admin_pass, &seed.domain)?;
+
+    for u in &seed.users {
+        let email = u
+            .email
+            .clone()
+            .unwrap_or_else(|| format!("{}@{}", u.user, seed.domain));
+        let roles = u.roles.clone().unwrap_or_else(|| vec!["user".to_string()]);
+        create_user(
+            &api, admin_user, admin_pass, &u.user, &u.pass, &email, &roles,
+        )?;
+    }
+
+    // SMTP inject fixtures (optional)
+    for inj in &seed.smtp_inject {
+        smtp_inject(stalwart_dir, inj)?;
+    }
+
+    Ok(())
+}
+
+fn wait_ready(api: &str, user: &str, pass: &str) -> Result<(), String> {
+    eprintln!("Waiting for management API at {api} ...");
+    for _ in 0..60 {
+        let status = Command::new("curl")
+            .arg("-s")
+            .arg("-o")
+            .arg("/dev/null")
+            .arg("--max-time")
+            .arg("2")
+            .arg("--connect-timeout")
+            .arg("2")
+            .arg("-u")
+            .arg(format!("{user}:{pass}"))
+            .arg("-H")
+            .arg("Accept: application/json")
+            .arg(format!("{api}/principal?limit=1"))
+            .status();
+
+        if matches!(status, Ok(s) if s.success()) {
+            return Ok(());
+        }
+
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    Err("management API did not become ready".to_string())
+}
+
+fn create_domain(api: &str, user: &str, pass: &str, domain: &str) -> Result<(), String> {
+    eprintln!("Creating domain principal: {domain}");
+    let v = curl_post_json_value(
+        &format!("{api}/principal"),
+        user,
+        pass,
+        &serde_json::json!({"type":"domain","name":domain}).to_string(),
+    )?;
+
+    accept_create_ok_or_exists(&v, "domain", domain)
+}
+
+fn create_user(
+    api: &str,
+    user: &str,
+    pass: &str,
+    principal: &str,
+    principal_pass: &str,
+    email: &str,
+    roles: &[String],
+) -> Result<(), String> {
+    eprintln!("Creating user principal: {email}");
+    let v = curl_post_json_value(
+        &format!("{api}/principal"),
+        user,
+        pass,
+        &serde_json::json!({
+            "type":"individual",
+            "name": principal,
+            "emails": [email],
+            "secrets": [principal_pass],
+            "roles": roles,
+        })
+        .to_string(),
+    )?;
+
+    accept_create_ok_or_exists(&v, "user", principal)
+}
+
+fn smtp_inject(stalwart_dir: &Path, inj: &SmtpInject) -> Result<(), String> {
+    let script = stalwart_dir.join("scripts/smtp_inject.py");
+    let eml_path = if PathBuf::from(&inj.eml_file).is_absolute() {
+        PathBuf::from(&inj.eml_file)
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(&inj.eml_file)
+    };
+
+    let mut cmd = Command::new("python3");
+    cmd.current_dir(stalwart_dir)
+        .arg(script)
+        .arg("--auth-user")
+        .arg(&inj.auth_user)
+        .arg("--auth-pass")
+        .arg(&inj.auth_pass)
+        .arg("--mail-from")
+        .arg(&inj.mail_from);
+
+    for rcpt in &inj.rcpt_to {
+        cmd.arg("--rcpt-to").arg(rcpt);
+    }
+
+    cmd.arg("--eml").arg(eml_path);
+
+    run_cmd(&mut cmd)
+}
+
+// (removed) curl_http_code: unused
+
+fn curl_post_json_value(
+    url: &str,
+    user: &str,
+    pass: &str,
+    body: &str,
+) -> Result<serde_json::Value, String> {
+    let out = Command::new("curl")
+        .arg("-sS")
+        .arg("-u")
+        .arg(format!("{user}:{pass}"))
+        .arg("-H")
+        .arg("Accept: application/json")
+        .arg("-H")
+        .arg("Content-Type: application/json")
+        .arg("-X")
+        .arg("POST")
+        .arg(url)
+        .arg("-d")
+        .arg(body)
+        .output()
+        .map_err(|e| format!("failed to start curl: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let v: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("seed api returned non-json: {e}\nstdout:\n{stdout}"))?;
+
+    Ok(v)
+}
+
+fn accept_create_ok_or_exists(v: &serde_json::Value, what: &str, name: &str) -> Result<(), String> {
+    if v.get("data").is_some() {
+        return Ok(());
+    }
+
+    if v.get("error").and_then(|e| e.as_str()) == Some("fieldAlreadyExists") {
+        return Ok(());
+    }
+
+    Err(format!("failed to create {what} {name}: {v}"))
 }
 
 fn fatal(msg: &str) -> ! {
