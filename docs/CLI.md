@@ -107,10 +107,12 @@ xin sugar maps directly to this model:
 - NOT: prefix `-` for a term or group
   - Example: `-in:Trash`, `-(from:spam subject:"sale")`
 
-Parsing/precedence rules:
-- OR exists **only** inside `or:(...)` (no bare `OR` keyword in v0), to keep parsing deterministic.
-- `-` binds to the next term/group.
-- Parentheses always form a subexpression.
+Parsing/precedence rules (v0 implementation constraints):
+- OR exists **only** inside `or:(...)` (no bare `OR` keyword), to keep parsing deterministic.
+- `or:(...)` is **not nestable** in v0. Inside it, only simple terms are allowed.
+- NOT (`-`) applies to the **next simple term** in v0. Group negation `-(...)` is reserved for a future version.
+- Parentheses grouping is reserved for a future version. (We keep the mapping documented, but do not implement it in v0.)
+- Quoted values `"..."` are supported for operator values (e.g. `subject:"foo bar"`).
 
 #### Compilation (examples)
 
