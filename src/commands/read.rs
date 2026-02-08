@@ -1,10 +1,13 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use jmap_client::core::query::{Filter as CoreFilter, Operator};
 use jmap_client::email;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::backend::Backend;
-use crate::cli::{AttachmentArgs, GetArgs, GetFormat, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs, ThreadGetArgs};
+use crate::cli::{
+    AttachmentArgs, GetArgs, GetFormat, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs,
+    ThreadGetArgs,
+};
 use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -42,7 +45,7 @@ fn parse_filter_value(v: &Value) -> Result<Option<CoreFilter<email::query::Filte
         None => {
             return Err(XinErrorOut::usage(
                 "filter-json must be an object".to_string(),
-            ))
+            ));
         }
     };
 
@@ -59,11 +62,7 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
             "AND" => Operator::And,
             "OR" => Operator::Or,
             "NOT" => Operator::Not,
-            other => {
-                return Err(XinErrorOut::usage(format!(
-                    "unsupported operator: {other}"
-                )))
-            }
+            other => return Err(XinErrorOut::usage(format!("unsupported operator: {other}"))),
         };
         let conditions = v
             .get("conditions")
@@ -146,7 +145,7 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
             other => {
                 return Err(XinErrorOut::usage(format!(
                     "unsupported filter-json key: {other}"
-                )))
+                )));
             }
         };
 
@@ -160,7 +159,11 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
     }
 }
 
-pub async fn search(command_name: &str, account: Option<String>, args: &SearchArgs) -> Envelope<Value> {
+pub async fn search(
+    command_name: &str,
+    account: Option<String>,
+    args: &SearchArgs,
+) -> Envelope<Value> {
     let backend = match Backend::connect().await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
@@ -231,7 +234,10 @@ pub async fn search(command_name: &str, account: Option<String>, args: &SearchAr
     Envelope::ok(command_name, account, json!({"items": items}), meta)
 }
 
-pub async fn messages_search(account: Option<String>, args: &MessagesSearchArgs) -> Envelope<Value> {
+pub async fn messages_search(
+    account: Option<String>,
+    args: &MessagesSearchArgs,
+) -> Envelope<Value> {
     let search_args = SearchArgs {
         query: args.query.clone(),
         max: args.max,
@@ -278,7 +284,10 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
     let max_body_value_bytes = args.max_body_bytes.unwrap_or(262_144);
 
     let email = match args.format {
-        GetFormat::Full => match backend.get_email_full(&args.email_id, max_body_value_bytes).await {
+        GetFormat::Full => match backend
+            .get_email_full(&args.email_id, max_body_value_bytes)
+            .await
+        {
             Ok(Some(e)) => e,
             Ok(None) => {
                 return Envelope::err(
@@ -290,7 +299,7 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
                         http: None,
                         jmap: Some(json!({"type": "notFound"})),
                     },
-                )
+                );
             }
             Err(e) => return Envelope::err(command_name, account, e),
         },
@@ -306,7 +315,7 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
                         http: None,
                         jmap: Some(json!({"type": "notFound"})),
                     },
-                )
+                );
             }
             Err(e) => return Envelope::err(command_name, account, e),
         },
@@ -325,7 +334,12 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         }
         Envelope::ok(command_name, account, data, meta)
     } else {
-        Envelope::ok(command_name, account, schema::get_email_data(&email, raw), Meta::default())
+        Envelope::ok(
+            command_name,
+            account,
+            schema::get_email_data(&email, raw),
+            Meta::default(),
+        )
     }
 }
 
@@ -350,7 +364,7 @@ pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
                     http: None,
                     jmap: Some(json!({"type": "notFound"})),
                 },
-            )
+            );
         }
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -384,7 +398,7 @@ pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value>
                     http: None,
                     jmap: Some(json!({"type": "notFound"})),
                 },
-            )
+            );
         }
         Err(e) => return Envelope::err(command_name, account, e),
     };

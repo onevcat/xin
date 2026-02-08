@@ -3,6 +3,7 @@ use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
 mod read;
+mod send;
 
 pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
     let account = cli.account.clone();
@@ -22,6 +23,7 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
             command: ThreadCommand::Attachments(args),
         } => read::thread_attachments(args).await,
         Command::Attachment(args) => read::attachment_download(args).await,
+        Command::Send(args) => send::send(account.clone(), args).await,
 
         _ => {
             let (command, _details) = command_name(&cli.command);

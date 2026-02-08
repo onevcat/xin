@@ -452,68 +452,20 @@ Per the RFC-first principle, xin will send standard requests and surface any ser
 
 **JMAP:** `Identity/get`
 
-### 4.1 `xin send --to ... --subject ... (--body ... | --body-file ... | --body-html ...) [--cc ...] [--bcc ...] [--attach ...] [--identity <id|email>]`
+### 4.1 `xin send --to <email> --subject <str> --text <str|@file>` (v0)
 **gog analog:** `gog gmail send ...`
 **JSON schema:** SCHEMA.md §7.2
 
-Reply support (v0):
-- `--reply-to-email-id <id>`
-- `--thread-id <id>`
-- `--reply-all` **not implemented in v0** (TBD)
+Body input:
+- `--text` accepts a literal string or `@/path/to/file.txt` to read from file.
 
-Identity / From selection:
-- `--identity <id|email>` (v0)
-  - If an Id is provided: use that Identity directly.
-  - If an email is provided: select the first Identity whose `email` matches.
+Behavior (v0):
+- Creates a `text/plain` draft via `Email/set` in the Drafts mailbox.
+- Uses the first available Identity from `Identity/get` as the From identity.
+- Submits via `EmailSubmission/set`.
 
-**TBD:** `--from <email>` as an alias of `--identity` (depends on provider semantics).
-
-Implementation model (JMAP, RFC-first):
-
-A single `xin send` invocation typically maps to one JMAP API request with multiple methodCalls:
-
-1) Upload blobs (for each `--attach`) via the **uploadUrl** endpoint (RFC 8620 §6.1)
-2) Create a draft Email via `Email/set` (RFC 8621 §4.6)
-   - Build a `bodyStructure` with a multipart/mixed root.
-   - Use `partId` + `bodyValues` for textual bodies (no upload required).
-   - Use `blobId` parts (from upload) for attachments.
-3) Submit via `EmailSubmission/set` (RFC 8621 §7.5)
-   - Reference the created Email id using a JMAP backreference (RFC 8620 §3.7).
-
-### Attachments (v0)
-
-CLI:
-- `--attach <path>` (repeatable)
-
-Rules (RFC-first):
-- xin uploads the file bytes as-is to the account upload endpoint (HTTP POST to `uploadUrl{accountId}`; RFC 8620 §6.1).
-- `Content-Type` is determined by xin (best-effort MIME sniffing; fallback `application/octet-stream`).
-- The upload response returns `{ blobId, type, size }`.
-- xin constructs an `EmailBodyPart` per attachment:
-  - `blobId`: from upload
-  - `type`: from upload response (or the same MIME type used in upload)
-  - `name`: basename of the file
-  - `disposition`: `"attachment"`
-
-**TBD (future flags):** overriding attachment name/type from CLI.
-
-Non-goals in v0:
-- inline attachments (`cid:`), multipart/related authoring, content-location/language.
-
-### Text body authoring (v0, fixed layout)
-
-Body inputs:
-- `--body <text>` (plain)
-- `--body-file <path|->` (plain; `-` reads stdin)
-- `--body-html <html>` (HTML)
-
-Layout rules:
-- If only plain is provided: message body is a single `text/plain` part.
-- If only HTML is provided: message body is a single `text/html` part.
-- If both plain + HTML are provided: message body is `multipart/alternative` with two subparts (`text/plain` then `text/html`).
-- If there are attachments: wrap the above body inside a top-level `multipart/mixed`, appending each attachment part after the body.
-
-This yields a deterministic RFC5322/MIME structure while remaining fully expressible via RFC 8621 `Email/set`.
+Not implemented yet (TBD):
+- HTML bodies, attachments, reply/threading flags, explicit identity selection.
 
 ### Error surfacing
 

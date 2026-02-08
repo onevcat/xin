@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use jmap_client::email::Email;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn received_at_rfc3339(e: &Email) -> Option<String> {
     e.received_at()

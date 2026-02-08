@@ -418,41 +418,14 @@ pub struct IdentitiesGetArgs {
 
 #[derive(Args, Debug)]
 pub struct SendArgs {
-    #[arg(long)]
+    #[arg(long, required = true, num_args = 1..)]
     pub to: Vec<String>,
 
     #[arg(long)]
-    pub subject: Option<String>,
+    pub subject: String,
 
     #[arg(long)]
-    pub body: Option<String>,
-
-    #[arg(long = "body-file")]
-    pub body_file: Option<String>,
-
-    #[arg(long = "body-html")]
-    pub body_html: Option<String>,
-
-    #[arg(long)]
-    pub cc: Vec<String>,
-
-    #[arg(long)]
-    pub bcc: Vec<String>,
-
-    #[arg(long = "attach")]
-    pub attach: Vec<String>,
-
-    #[arg(long)]
-    pub identity: Option<String>,
-
-    #[arg(long = "reply-to-email-id")]
-    pub reply_to_email_id: Option<String>,
-
-    #[arg(long = "thread-id")]
-    pub thread_id: Option<String>,
-
-    #[arg(long)]
-    pub reply_all: bool,
+    pub text: String,
 }
 
 #[derive(Subcommand, Debug)]

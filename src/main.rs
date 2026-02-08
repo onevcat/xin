@@ -1,10 +1,10 @@
+mod backend;
 mod cli;
 mod commands;
-mod error;
-mod output;
 mod config;
+mod error;
 mod jmap;
-mod backend;
+mod output;
 mod schema;
 
 use clap::Parser;

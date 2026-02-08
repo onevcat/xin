@@ -52,12 +52,12 @@ fn default_output_is_json_envelope() {
     // main() forces exit code 1 when ok=false.
     assert_eq!(status.code(), Some(1));
 
-    assert_eq!(
-        v.get("schemaVersion").and_then(|v| v.as_str()),
-        Some("0.1")
-    );
+    assert_eq!(v.get("schemaVersion").and_then(|v| v.as_str()), Some("0.1"));
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("labels.list"));
+    assert_eq!(
+        v.get("command").and_then(|v| v.as_str()),
+        Some("labels.list")
+    );
     assert_eq!(
         v.get("error")
             .and_then(|e| e.get("kind"))
@@ -99,5 +99,8 @@ fn command_names_for_nested_subcommands_are_stable() {
     );
 
     let (_status, v) = run(&["thread", "get", "T123"]);
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("thread.get"));
+    assert_eq!(
+        v.get("command").and_then(|v| v.as_str()),
+        Some("thread.get")
+    );
 }

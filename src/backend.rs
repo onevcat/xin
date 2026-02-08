@@ -1,7 +1,10 @@
 use jmap_client::core::query::Filter as CoreFilter;
 use jmap_client::core::query::QueryResponse;
+use jmap_client::core::set::SetObject;
 use jmap_client::email;
 use jmap_client::email::Email;
+use jmap_client::identity;
+use jmap_client::mailbox;
 use jmap_client::thread;
 
 use crate::error::XinErrorOut;
@@ -30,12 +33,16 @@ impl Backend {
     }
 
     pub async fn download_blob(&self, blob_id: &str) -> Result<Vec<u8>, XinErrorOut> {
-        self.j.client().download(blob_id).await.map_err(|e| XinErrorOut {
-            kind: "httpError".to_string(),
-            message: format!("download failed: {e}"),
-            http: None,
-            jmap: None,
-        })
+        self.j
+            .client()
+            .download(blob_id)
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("download failed: {e}"),
+                http: None,
+                jmap: None,
+            })
     }
 
     pub async fn get_email(
@@ -110,7 +117,11 @@ impl Backend {
             })
     }
 
-    pub async fn thread_get(&self, thread_id: &str, include_attachments: bool) -> Result<Option<ThreadResult>, XinErrorOut> {
+    pub async fn thread_get(
+        &self,
+        thread_id: &str,
+        include_attachments: bool,
+    ) -> Result<Option<ThreadResult>, XinErrorOut> {
         let mut req = self.j.client().build();
 
         let t = req.get_thread();
@@ -185,7 +196,11 @@ impl Backend {
             None => return Ok(None),
         };
 
-        let email_ids = t.email_ids().iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let email_ids = t
+            .email_ids()
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>();
 
         let mut email_resp = email_resp.ok_or_else(|| XinErrorOut {
             kind: "jmapRequestError".to_string(),
@@ -215,9 +230,7 @@ impl Backend {
         if let Some(f) = filter {
             q.filter(f);
         }
-        q.sort([
-            email::query::Comparator::received_at().is_ascending(is_ascending),
-        ]);
+        q.sort([email::query::Comparator::received_at().is_ascending(is_ascending)]);
         q.limit(limit);
         q.position(position);
         q.arguments().collapse_threads(collapse_threads);
@@ -283,5 +296,112 @@ impl Backend {
             query,
             emails: get_resp.take_list(),
         })
+    }
+
+    pub async fn list_mailboxes(&self) -> Result<Vec<jmap_client::mailbox::Mailbox>, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let get_request = request.get_mailbox();
+        get_request.properties([
+            mailbox::Property::Id,
+            mailbox::Property::Name,
+            mailbox::Property::Role,
+        ]);
+        request
+            .send_single::<jmap_client::core::response::MailboxGetResponse>()
+            .await
+            .map(|mut r| r.take_list())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn list_identities(
+        &self,
+    ) -> Result<Vec<jmap_client::identity::Identity>, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let get_request = request.get_identity();
+        get_request.properties([
+            identity::Property::Id,
+            identity::Property::Name,
+            identity::Property::Email,
+        ]);
+        request
+            .send_single::<jmap_client::core::response::IdentityGetResponse>()
+            .await
+            .map(|mut r| r.take_list())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Identity/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn create_text_email(
+        &self,
+        mailbox_id: &str,
+        from_name: Option<String>,
+        from_email: String,
+        to: &[String],
+        subject: &str,
+        text: &str,
+    ) -> Result<Email, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let create = request.set_email().create();
+        create.mailbox_ids([mailbox_id.to_string()]);
+
+        if let Some(name) = from_name {
+            create.from([(name, from_email.clone())]);
+        } else {
+            create.from([from_email.clone()]);
+        }
+        create.to(to.iter().map(|addr| addr.as_str()));
+        create.subject(subject.to_string());
+
+        let part_id = "text";
+        let body_part = jmap_client::email::EmailBodyPart::new()
+            .part_id(part_id)
+            .content_type("text/plain");
+        let text_part = jmap_client::email::EmailBodyPart::new()
+            .part_id(part_id)
+            .content_type("text/plain");
+        create.body_structure(body_part.into());
+        create.text_body(text_part);
+        create.body_value(part_id.to_string(), text);
+
+        let create_id = create
+            .create_id()
+            .ok_or_else(|| XinErrorOut::config("Email/set missing create id".to_string()))?;
+
+        request
+            .send_single::<jmap_client::core::response::EmailSetResponse>()
+            .await
+            .and_then(|mut r| r.created(&create_id))
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/set failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn submit_email(
+        &self,
+        email_id: &str,
+        identity_id: &str,
+    ) -> Result<jmap_client::email_submission::EmailSubmission, XinErrorOut> {
+        self.j
+            .client()
+            .email_submission_create(email_id, identity_id)
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("EmailSubmission/set failed: {e}"),
+                http: None,
+                jmap: None,
+            })
     }
 }
