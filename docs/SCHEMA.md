@@ -79,6 +79,7 @@ Fields:
   - `"xinUsageError"` (invalid CLI args)
   - `"xinParseError"` (DSL / JSON parsing)
   - `"xinConfigError"` (missing account, missing token env, etc.)
+  - `"xinNotImplemented"` (command surface exists but not implemented yet)
   - `"httpError"` (non-2xx outside JMAP method errors; includes problem+json if any)
   - `"jmapRequestError"` (request-level JMAP error)
   - `"jmapMethodError"` (method-level JMAP error)
