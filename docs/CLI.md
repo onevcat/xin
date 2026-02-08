@@ -262,16 +262,25 @@ JSON output fields (proposal):
 **gog analog:** `gog gmail thread modify <threadId> --add/--remove`
 
 `X/Y` support:
-- Mailbox membership (move/copy): `INBOX`, `ARCHIVE`, `TRASH`, `SPAM` (where available)
-- Keywords (tags): `$seen`, `$flagged`, plus provider/user keywords
+- Mailbox membership (move/copy): via `mailboxIds`
+- Keywords (tags): via `keywords` (e.g. `$seen`, `$flagged`)
 
-Because Gmail uses labels and JMAP uses mailboxIds + keywords, xin should accept both:
-- `--add-mailbox <nameOrId>` / `--remove-mailbox <nameOrId>` (recommended)
+Flags:
+- `--add-mailbox <nameOrId>` / `--remove-mailbox <nameOrId>`
 - `--add-keyword <kw>` / `--remove-keyword <kw>`
+- Convenience: `--add/--remove` auto-routes (mailbox name/id/role → mailbox op; otherwise keyword op)
 
-For parity with gog, `--add/--remove` can remain as a convenience that auto-routes:
-- If token matches a known mailbox name => mailbox op
-- Else => keyword op
+Implementation plan (v0, fixed — RFC-compliant):
+
+- JMAP does **not** define an `inThread` filter for `Email/query` in RFC 8621.
+- The RFC-defined way to expand a thread into its emails is `Thread/get` (RFC 8621 §3.1), which returns `emailIds`.
+
+To modify a thread, xin does:
+1) `Thread/get` for `<threadId>` → obtain `emailIds`
+2) apply the modification to those emailIds via `Email/set` (batch update; patch syntax)
+
+Error behavior:
+- If the server returns a standard error (e.g. unknown method/capability, forbidden, notFound), xin surfaces it as structured output.
 
 ### 2.2 `xin batch modify <emailId>... --add X --remove Y`
 **gog analog:** `gog gmail batch modify <messageId>...`
