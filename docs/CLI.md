@@ -323,26 +323,54 @@ Notes:
 
 ## 3) Labels (Mailboxes)
 
-### 3.1 `xin labels list`
+Naming / aliasing (fixed):
+- In xin, **labels are mailboxes** (RFC 8621 `Mailbox`).
+- For ergonomics:
+  - `xin labels ...` and `xin mailboxes ...` are **exact aliases** (same commands, same flags, same output).
+
+### 3.1 `xin labels list` / `xin mailboxes list`
 **gog analog:** `gog gmail labels list`
 
-- For JMAP, this lists **Mailboxes**.
+- Lists all mailboxes (via `Mailbox/get` with `ids=null`).
 
-### 3.2 `xin labels get <mailboxIdOrName>`
+### 3.2 `xin labels get <mailboxId|name|role>` / `xin mailboxes get ...`
 **gog analog:** `gog gmail labels get ...`
 
-- Return mailbox details including unread/total counts when available.
+- Returns mailbox details including unread/total counts when available.
+- Resolution order (v0):
+  1) exact id match
+  2) role match (e.g. `inbox`, `drafts`, `sent`, `trash`, `junk`)
+  3) exact name match
+  4) case-insensitive name match
 
-### 3.3 `xin labels create <name>`
+### 3.3 `xin labels create <name> [--parent <mailboxId>] [--role <role>] [--subscribe true|false]`
 **gog analog:** `gog gmail labels create <name>`
 
-### 3.4 `xin labels modify <mailboxId> ...` (TBD)
-**gog analog:** `gog gmail labels modify ...`
+- Creates a mailbox via `Mailbox/set`.
+- Notes:
+  - Setting `--role` may be rejected by servers; xin will surface the error.
+  - `--subscribe` maps to `isSubscribed`.
 
-Gmail “modify labels on threads” doesn’t map cleanly here; in JMAP labels==mailboxes.
+### 3.4 `xin labels rename <mailboxId> --name <newName>` (v0)
 
-Proposal:
-- Keep `labels modify` for mailbox properties (rename, parent, sortOrder) rather than message tagging.
+- Convenience wrapper around `Mailbox/set` update.
+
+### 3.5 `xin labels delete <mailboxId> [--remove-emails]` (TBD)
+
+- Destroys a mailbox via `Mailbox/set` destroy.
+- RFC 8621 has `onDestroyRemoveEmails` (Mailbox/set) semantics; we can expose it as `--remove-emails`.
+
+### 3.6 `xin labels modify <mailboxId> ...` (TBD)
+
+Gmail’s “modify labels on threads” does not map to JMAP.
+
+In JMAP, `labels modify` should mean modifying **mailbox properties**, e.g.:
+- `--name`
+- `--parent`
+- `--sort-order`
+- `--subscribe true|false`
+
+We keep `modify` as a future umbrella command once the final flag set is agreed.
 
 ---
 
