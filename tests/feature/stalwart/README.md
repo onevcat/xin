@@ -24,4 +24,5 @@ cd tests/feature/stalwart
 ## Notes
 
 - State is stored under `tests/feature/stalwart/.state/` (gitignored).
+- Seed domain: `example.org` (local-only)
 - Credentials are **local-only** and must not be reused.

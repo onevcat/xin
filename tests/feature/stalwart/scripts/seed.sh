@@ -5,7 +5,7 @@ BASE_URL="http://127.0.0.1:39090"
 API="$BASE_URL/api"
 ADMIN_USER="admin"
 ADMIN_PASS="xin-admin-pass"
-DOMAIN="example.test"
+DOMAIN="example.org"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -15,6 +15,7 @@ need_cmd() {
 }
 
 need_cmd curl
+need_cmd python3
 
 api() {
   # Basic-auth is the most likely scheme for local fallback-admin.
@@ -70,6 +71,41 @@ wait_ready
 create_domain || true
 create_user "alice" "alice-pass" || true
 create_user "bob" "bob-pass" || true
+
+ensure_identity() {
+  local user="$1"   # alice
+  local pass="$2"   # alice-pass
+  local email="$3"  # alice@example.test
+  local name="$4"   # Alice
+
+  echo "Ensuring JMAP identity exists for $user ($email)"
+
+  local account_id
+  account_id="$(curl -fsSL -u "$user:$pass" "$BASE_URL/.well-known/jmap" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(s["primaryAccounts"]["urn:ietf:params:jmap:mail"])')"
+
+  local resp
+  resp="$(curl -fsS -u "$user:$pass" -H 'Content-Type: application/json' \
+    -d "{\"using\":[\"urn:ietf:params:jmap:core\",\"urn:ietf:params:jmap:mail\"],\"methodCalls\":[[\"Identity/get\",{\"accountId\":\"$account_id\"},\"0\"]]}" \
+    "$BASE_URL/jmap")"
+
+  local has_any
+  has_any="$(python3 -c 'import json,sys; resp=json.load(sys.stdin); mr=resp.get("methodResponses", []); obj = mr[0][1] if mr and len(mr[0])>1 else {}; items = obj.get("list", []) if isinstance(obj, dict) else []; print("1" if items else "0")' <<<"$resp")"
+
+  if [ "$has_any" = "1" ]; then
+    echo "  Identity already exists."
+    return 0
+  fi
+
+  echo "  Creating identity via Identity/set"
+  curl -fsS -u "$user:$pass" -H 'Content-Type: application/json' \
+    -d "{\"using\":[\"urn:ietf:params:jmap:core\",\"urn:ietf:params:jmap:mail\"],\"methodCalls\":[[\"Identity/set\",{\"accountId\":\"$account_id\",\"create\":{\"c0\":{\"name\":\"$name\",\"email\":\"$email\"}}},\"0\"]]}" \
+    "$BASE_URL/jmap" >/dev/null
+
+  echo "  Identity created."
+}
+
+# Needed for xin send (EmailSubmission requires identityId).
+ensure_identity "alice" "alice-pass" "alice@example.org" "Alice"
 
 echo "Seed done."
 echo "  alice: alice@$DOMAIN / alice-pass"

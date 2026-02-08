@@ -1,0 +1,62 @@
+id: self_send
+requiresFresh: false
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: send-to-self
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] hello"
+        - --text
+        - "hello from xin"
+    save:
+      emailId: /data/draft/emailId
+      threadId: /data/draft/threadId
+
+  - name: wait-visible-in-search
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: "[xin-case:${caseId}:${runId}]"
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      foundEmailId: /data/items/0/emailId
+      foundThreadId: /data/items/0/threadId
+
+  - name: get-full
+    xin:
+      args:
+        - get
+        - ${foundEmailId}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${foundEmailId}
+
+  - name: thread-get
+    xin:
+      args:
+        - thread
+        - get
+        - ${foundThreadId}
+    expect:
+      - path: /data/threadId
+        equals: ${foundThreadId}

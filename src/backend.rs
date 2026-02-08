@@ -362,13 +362,12 @@ impl Backend {
         create.subject(subject.to_string());
 
         let part_id = "text";
-        let body_part = jmap_client::email::EmailBodyPart::new()
-            .part_id(part_id)
-            .content_type("text/plain");
         let text_part = jmap_client::email::EmailBodyPart::new()
             .part_id(part_id)
             .content_type("text/plain");
-        create.body_structure(body_part.into());
+
+        // Stalwart rejects setting both textBody and bodyStructure on Email/set.
+        // For a simple text/plain send, keep it minimal: textBody + bodyValues.
         create.text_body(text_part);
         create.body_value(part_id.to_string(), text);
 
