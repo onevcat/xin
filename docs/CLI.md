@@ -314,24 +314,42 @@ Proposal:
 
 ## 4) Write
 
-### 4.1 `xin send --to ... --subject ... --body-file ... [--cc ...] [--bcc ...] [--attach ...]`
+Write commands require the server/account to support the submission capability (`urn:ietf:params:jmap:submission`).
+If unavailable (e.g. read-only/shared accounts), xin should fail with a clear error.
+
+### 4.0 `xin identities list|get <id>` (v0)
+
+- Lists available sending identities (if supported).
+- Useful for figuring out which From addresses/aliases are permitted.
+
+**JMAP:** `Identity/get`
+
+### 4.1 `xin send --to ... --subject ... (--body ... | --body-file ... | --body-html ...) [--cc ...] [--bcc ...] [--attach ...] [--identity <id|email>]`
 **gog analog:** `gog gmail send ...`
 
-Reply support (parity):
+Reply support (v0):
 - `--reply-to-email-id <id>`
 - `--thread-id <id>`
-- `--reply-all`
+- `--reply-all` **not implemented in v0** (TBD)
+
+Identity / From selection:
+- `--identity <id|email>` (v0)
+  - If an Id is provided: use that Identity directly.
+  - If an email is provided: select the first Identity whose `email` matches.
+
+**TBD:** `--from <email>` as an alias of `--identity` (depends on provider semantics).
 
 Implementation model (JMAP):
 - Create draft via `Email/set` into Drafts mailbox
 - Send via `EmailSubmission/set`
 
-**TBD:** “from alias” / identities handling differs by provider.
-
 ### 4.2 `xin drafts list|get|create|update|delete|send`
 **gog analog:** `gog gmail drafts ...`
 
-Drafts are just emails in the Drafts mailbox.
+Drafts are emails in the Drafts mailbox.
+
+v0 note:
+- `drafts send <draftId>` should create an `EmailSubmission` referencing the draft.
 
 ---
 
