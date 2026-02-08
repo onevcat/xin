@@ -1,0 +1,104 @@
+id: existing_big_attachment
+requiresFresh: true
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+  smtpInject:
+    - authUser: bob
+      authPass: bob-pass
+      mailFrom: bob@example.org
+      rcptTo:
+        - alice@example.org
+      emlFile: tests/feature/stalwart/fixtures/existing_big_attachment.eml
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+
+steps:
+  - name: alice-wait-visible-in-search
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: "[xin-case:existing_big_attachment]"
+      - path: /data/items/0/hasAttachment
+        equals: true
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId: /data/items/0/emailId
+      threadId: /data/items/0/threadId
+
+  - name: alice-get-full-default-limit
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - get
+        - ${emailId}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${emailId}
+      - path: /data/attachments/0/blobId
+        exists: true
+      - path: /data/body/htmlMeta/isTruncated
+        equals: true
+      - path: /meta/warnings/0
+        contains: "body.html truncated"
+
+  - name: alice-thread-attachments
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - thread
+        - attachments
+        - ${threadId}
+    expect:
+      - path: /data/attachments/0/emailId
+        equals: ${emailId}
+      - path: /data/attachments/0/blobId
+        exists: true
+      - path: /data/attachments/0/name
+        equals: "big.bin"
+      - path: /data/attachments/0/size
+        equals: 300000
+    save:
+      attachmentEmailId: /data/attachments/0/emailId
+      attachmentBlobId: /data/attachments/0/blobId
+
+  - name: alice-download-attachment
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - attachment
+        - ${attachmentEmailId}
+        - ${attachmentBlobId}
+        - --out
+        - tests/feature/stalwart/.state/download-${runId}.bin
+    expect:
+      - path: /data/bytes
+        equals: 300000
