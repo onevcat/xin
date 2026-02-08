@@ -49,72 +49,67 @@ Config should support multiple accounts:
 
 ## 1) Read
 
-### 1.1 `xin search <query> [--max N] [--page TOKEN] [--oldest]`
+### 1.1 `xin search [<query>] [--max N] [--page TOKEN] [--oldest] [--filter-json '<json>']`
 **gog analog:** `gog gmail search` (threads)
 
 - Returns: list of threads (or thread-like groups), with summary fields.
 
-Query support (DSL v0):
-- We intentionally support a **Gmail-inspired subset** of operators for muscle memory, but this is **xin’s own DSL**.
-- Implementation-wise, this means: **parse DSL → build a JMAP `Email/query` filter JSON**.
-- Always offer an escape hatch:
-  - `--filter-json '<JMAP Email/query filter>'` (raw JMAP)
+Query support policy (updated choice):
 
-Why “Gmail-inspired”?
-- Gmail’s search operators are publicly documented (user-facing, not a formal grammar):
-  - https://support.google.com/mail/answer/7190
+1) **Prefer native JMAP filter JSON** (first-class, recommended for agents)
+- `--filter-json '<JMAP Email/query filter JSON>'`
+- This is the most precise and portable way to search across JMAP servers.
 
-#### Supported operators (initial)
+2) **Provide a small xin query sugar** (optional, human-friendly)
+- `<query>` is a xin-defined DSL that is intentionally **easy to map** to JMAP.
+- It is **not** meant to be compatible with Gmail query language.
+- Implementation: parse sugar → compile to the same JMAP filter JSON shape.
+
+#### Sugar DSL v0 (must be 1:1 mappable)
+
+Operators:
 
 - Addressing:
-  - `from:<addr|text>`
-  - `to:<addr|text>`
-  - `cc:<addr|text>`
-  - `bcc:<addr|text>`
+  - `from:<text>` / `to:<text>` / `cc:<text>` / `bcc:<text>`
 - Content:
   - `subject:<text>`
-  - `"exact phrase"` (quoted)
-  - bare terms: `foo bar` (free text)
+  - `text:<text>` (explicit full-text)
 - Time:
-  - `after:YYYY/MM/DD`  (or `YYYY-MM-DD`)
-  - `before:YYYY/MM/DD`
-  - `newer_than:<Nd|Nm|Ny>`
-  - `older_than:<Nd|Nm|Ny>`
-- State:
-  - `is:unread` / `is:read`  (maps to keyword `$seen`)
-  - `is:starred`             (maps to keyword `$flagged`)
-- Location:
-  - `in:inbox` / `in:archive` / `in:trash` / `in:spam` (provider permitting)
-  - `in:anywhere` (no mailbox restriction)
-  - `label:<name>` is accepted as an alias of `in:<name>` for familiarity (JMAP has mailboxes, not Gmail labels)
+  - `after:<YYYY-MM-DD>`
+  - `before:<YYYY-MM-DD>`
+- State/keywords:
+  - `seen:true|false` → `$seen`
+  - `flagged:true|false` → `$flagged`
+- Mailbox:
+  - `in:<mailboxNameOrId>`
 - Attachments:
-  - `has:attachment`
+  - `has:attachment` (alias of `hasAttachment:true`)
+  - `hasAttachment:true|false`
 
-#### Boolean logic (initial)
-
+Boolean logic:
 - AND: implicit by whitespace
-- NOT: prefix `-` (e.g. `-from:foo@bar.com`, `-subject:"weekly"`)
+- NOT: prefix `-` (negation)
 
-**TBD:** `OR`, parentheses, `{}` groups, `AROUND`, size operators (`larger:`/`smaller:`), filename/type operators (`filename:`), category operators (`category:`).
+**TBD:** `or:(...)` / parentheses grouping; we only add boolean constructs when we can map cleanly to JMAP’s filter combinators.
 
-#### Compilation to JMAP filters (high-level)
+#### Compilation (examples)
 
-xin compiles the DSL into a JMAP `Email/query` filter.
+- `from:github subject:"Kingfisher" seen:false` →
 
-- `from:` → `filter.from = "..."`
-- `to:`   → `filter.to = "..."`
-- `cc:` / `bcc:` → corresponding fields
-- `subject:` → `filter.subject = "..."`
-- bare terms / quoted phrases → `filter.text = "..."` (preferred)
-- `has:attachment` → `filter.hasAttachment = true`
-- `after:` / `before:` / `newer_than:` / `older_than:` → `filter.after` / `filter.before` (date math)
-- `is:unread` → `filter.notKeyword = "$seen"`
-- `is:read`   → `filter.hasKeyword = "$seen"`
-- `is:starred` → `filter.hasKeyword = "$flagged"`
-- `in:<mailbox>` → `filter.inMailbox = <mailboxId>` (resolved by name via `Mailbox/get`)
-- NOT (`-term`) → compiled using JMAP’s `operator: "NOT"` wrapper (exact structure TBD)
+```json
+{ "from": "github", "subject": "Kingfisher", "notKeyword": "$seen" }
+```
 
-Note: the exact JMAP filter field names/structures are per RFC 8621 / JMAP Mail spec; xin should validate against server capabilities at runtime.
+- `in:INBOX has:attachment after:2026-01-01` →
+
+```json
+{ "inMailbox": "<resolved-mailbox-id>", "hasAttachment": true, "after": "2026-01-01T00:00:00Z" }
+```
+
+Notes:
+- `in:<...>` requires mailbox name→id resolution via `Mailbox/get`.
+- Time values should be normalized to RFC3339 instants (timezone handling TBD; default local).
+- If both `<query>` and `--filter-json` are provided, `--filter-json` wins.
 
 JSON output fields (proposal):
 - `items[]`: `{ threadId, latestEmailId, subject, from, to, date, snippet, unread, hasAttachment, mailboxIds, keywords }`
