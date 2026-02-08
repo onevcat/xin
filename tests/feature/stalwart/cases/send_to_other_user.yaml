@@ -1,0 +1,83 @@
+id: send_to_other_user
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+
+steps:
+  - name: alice-send-to-bob
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - send
+        - --to
+        - bob@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] hi bob"
+        - --text
+        - "hello bob from alice"
+
+  - name: bob-wait-visible-in-search
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/subject
+        contains: "[xin-case:${caseId}:${runId}]"
+      - path: /data/items/0/from/0/email
+        equals: "alice@example.org"
+      - path: /data/items/0/to/0/email
+        equals: "bob@example.org"
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      bobEmailId: /data/items/0/emailId
+      bobThreadId: /data/items/0/threadId
+
+  - name: bob-get-full
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - get
+        - ${bobEmailId}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${bobEmailId}
+      - path: /data/email/subject
+        contains: "[xin-case:${caseId}:${runId}]"
+
+  - name: bob-thread-get
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - thread
+        - get
+        - ${bobThreadId}
+    expect:
+      - path: /data/threadId
+        equals: ${bobThreadId}
