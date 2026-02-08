@@ -373,17 +373,54 @@ Identity / From selection:
 
 **TBD:** `--from <email>` as an alias of `--identity` (depends on provider semantics).
 
-Implementation model (JMAP):
-- Create draft via `Email/set` into Drafts mailbox
-- Send via `EmailSubmission/set`
+Implementation model (JMAP, RFC-first):
+
+A single `xin send` invocation typically maps to one JMAP API request with multiple methodCalls:
+
+1) Upload blobs (for each `--attach`) via the **uploadUrl** endpoint (RFC 8620 §6.1)
+2) Create a draft Email via `Email/set` (RFC 8621 §4.6)
+   - Build a `bodyStructure` with a multipart/mixed root.
+   - Use `partId` + `bodyValues` for textual bodies (no upload required).
+   - Use `blobId` parts (from upload) for attachments.
+3) Submit via `EmailSubmission/set` (RFC 8621 §7.5)
+   - Reference the created Email id using a JMAP backreference (RFC 8620 §3.7).
+
+### Attachments (v0)
+
+CLI:
+- `--attach <path>` (repeatable)
+
+Rules:
+- xin uploads the file bytes as-is to the account upload endpoint (HTTP POST to `uploadUrl{accountId}`), setting `Content-Type` to the file MIME type.
+- The upload response returns `{ blobId, type, size }`.
+- xin then constructs an `EmailBodyPart` per attachment:
+  - `blobId`: from upload
+  - `type`: MIME type
+  - `name`: basename of the file (or explicit name TBD)
+  - `disposition`: `"attachment"`
+
+Non-goals in v0 (TBD):
+- inline attachments (`cid:`), content-location/language, multipart/related authoring.
+
+### Text body authoring (v0)
+
+- `--body/--body-file` produces one `text/plain` part.
+- `--body-html` produces one `text/html` part.
+- If both plain + html are supplied, xin MAY build a `multipart/alternative` inside the mixed root. (TBD: exact layout.)
+
+### Error surfacing
+
+- If a server rejects an upload or references an unknown blobId, xin reports the server’s standard error (e.g. `blobNotFound`) verbatim in structured output.
 
 ### 4.2 `xin drafts list|get|create|update|delete|send`
 **gog analog:** `gog gmail drafts ...`
 
 Drafts are emails in the Drafts mailbox.
 
-v0 note:
-- `drafts send <draftId>` should create an `EmailSubmission` referencing the draft.
+v0 notes:
+- `drafts create/update` uses `Email/set` with mailbox membership pointing to the Drafts mailbox (role=`drafts` when available).
+- `drafts send <draftId>` creates an `EmailSubmission` referencing the draft.
+- Attachments for drafts follow the same `uploadUrl` + `blobId` rules as `xin send`.
 
 ---
 
