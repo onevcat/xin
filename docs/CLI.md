@@ -52,7 +52,31 @@ Config should support multiple accounts:
 ### 1.1 `xin search [<query>] [--max N] [--page TOKEN] [--oldest] [--filter-json '<json>']`
 **gog analog:** `gog gmail search` (threads)
 
-- Returns: list of threads (or thread-like groups), with summary fields.
+- Returns: list of **thread-like** results by default (see Threading below).
+
+Threading (fixed for v0):
+- xin uses JMAP `Email/query` with `collapseThreads=true` by default.
+- Each result item corresponds to **at most one Email per Thread** in the matching set.
+- Provide:
+  - `--collapse-threads=true|false` (default: true)
+  - `xin messages search ...` for explicit per-email results
+
+Sorting (fixed for v0):
+- Default sort: `receivedAt desc` (newest first).
+- Provide `--sort receivedAt` (v0 only). (TBD: additional sort keys.)
+
+Paging token (fixed for v0):
+- JMAP paging is based on `position/anchor/limit` semantics.
+- xin defines `--page TOKEN` as an opaque cursor (base64url-encoded JSON) containing the minimal state needed to continue.
+- Cursor contents (proposal): `{ "anchor": <id|null>, "position": <int>, "limit": <int>, "collapseThreads": <bool>, "sort": <...>, "filterHash": <...> }`.
+
+Mailbox resolution (fixed for v0):
+- `in:<mailbox>` resolves in this order:
+  1) mailbox **role** match (e.g. role=`inbox`, `trash`, `spam`)
+  2) exact name match
+  3) case-insensitive name match
+  4) explicit id (if value already looks like a JMAP Id)
+- This avoids hard-coding localized names.
 
 Query support policy (updated choice):
 
