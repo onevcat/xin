@@ -1,0 +1,49 @@
+# Stalwart config for xin docker feature tests (local-only)
+#
+# Goals:
+# - Provide an HTTP (non-TLS) listener for JMAP + Management API.
+# - Use internal directory + RocksDB for a self-contained instance.
+# - Keep ports high and bound to localhost via docker port mapping.
+
+[server]
+hostname = "127.0.0.1"
+
+# HTTP listener (JMAP at /jmap, discovery at /.well-known/jmap, management API under /api)
+[server.listener."http"]
+bind = ["0.0.0.0:39090"]
+protocol = "http"
+tls.implicit = false
+
+# SMTP listener (for fixture injection later)
+[server.listener."smtp"]
+bind = ["0.0.0.0:32525"]
+protocol = "smtp"
+tls.implicit = false
+
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+directory = "internal"
+
+[store."rocksdb"]
+type = "rocksdb"
+path = "%{env:STALWART_PATH}%/data"
+compression = "lz4"
+
+[directory."internal"]
+type = "internal"
+store = "rocksdb"
+
+[tracer."stdout"]
+type = "stdout"
+level = "info"
+ansi = false
+enable = true
+
+# Admin credentials for web-admin and management API.
+# DO NOT reuse this outside local tests.
+[authentication.fallback-admin]
+user = "admin"
+secret = "%{env:ADMIN_SECRET}%"

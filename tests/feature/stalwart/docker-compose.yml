@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:latest
+    container_name: xin-stalwart
+    environment:
+      # Stalwart uses this to locate its data directory in our config.
+      STALWART_PATH: /opt/stalwart
+
+      # Fallback admin for management API + web-admin (local-only).
+      ADMIN_SECRET: xin-admin-pass
+
+    # Bind only to localhost to avoid exposing a mail server to the LAN.
+    ports:
+      - "127.0.0.1:39090:39090" # HTTP: JMAP + /.well-known + /api
+      - "127.0.0.1:32525:32525" # SMTP (fixture injection)
+
+    volumes:
+      # This directory is created by scripts/up.sh (gitignored).
+      - ./.state/opt-stalwart:/opt/stalwart
