@@ -18,4 +18,5 @@
 
 ## Docs
 
-- [Initial spec: gog gmail parity mapping + Gmail vs JMAP differences](docs/INITIAL.md)
+- [Initial spec (overview)](docs/INITIAL.md)
+- [CLI contract (full flags/commands)](docs/CLI.md)
