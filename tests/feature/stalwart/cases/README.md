@@ -9,6 +9,13 @@ cd ~/Projects/xin
 cargo run --bin xin-feature -- --fresh --case tests/feature/stalwart/cases/self_send.yaml
 ```
 
+Run all cases in a directory:
+
+```bash
+cd ~/Projects/xin
+cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases --all
+```
+
 ## Case YAML DSL (minimal)
 
 Top-level fields:
@@ -60,6 +67,7 @@ Each step is one `xin ...` subprocess call.
 
 Fields:
 - `name` (optional): display name.
+- `env` (optional): step-level env overrides/extra vars (merged on top of case `env`).
 - `xin.args: ["messages", "search", ...]`: argv list.
 - `retry` (optional): retry the whole step until it passes.
   - `attempts` (default 20)

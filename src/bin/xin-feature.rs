@@ -1,6 +1,7 @@
 use clap::Parser;
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -12,14 +13,22 @@ use std::time::Duration;
 )]
 struct Cli {
     /// Path to a case YAML file.
+    #[arg(long, conflicts_with_all = ["case_dir", "all"])]
+    case: Option<PathBuf>,
+
+    /// Directory containing cases (defaults to tests/feature/stalwart/cases).
     #[arg(long)]
-    case: PathBuf,
+    case_dir: Option<PathBuf>,
+
+    /// Run all *.yaml cases in --case-dir.
+    #[arg(long, requires = "case_dir", conflicts_with = "case")]
+    all: bool,
 
     /// Directory containing the Stalwart docker setup (tests/feature/stalwart).
     #[arg(long, default_value = "tests/feature/stalwart")]
     stalwart_dir: PathBuf,
 
-    /// Reset the docker server state before running (down + rm -rf .state + up + seed).
+    /// Reset the docker server state before running (down + rm -rf .state + up).
     #[arg(long)]
     fresh: bool,
 }
@@ -89,6 +98,9 @@ struct Step {
     #[serde(default)]
     name: Option<String>,
 
+    #[serde(default)]
+    env: BTreeMap<String, String>,
+
     xin: XinStep,
 
     #[serde(default)]
@@ -154,34 +166,13 @@ struct Context {
 
 fn main() {
     let cli = Cli::parse();
-
     let root_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let case_path = if cli.case.is_absolute() {
-        cli.case.clone()
-    } else {
-        root_dir.join(&cli.case)
-    };
-
-    let case =
-        read_case(&case_path).unwrap_or_else(|e| fatal(&format!("failed to read case: {e}")));
-
-    let fresh = cli.fresh || case.requires_fresh;
 
     let stalwart_dir = root_dir.join(&cli.stalwart_dir);
-    ensure_stalwart(&stalwart_dir, fresh)
-        .unwrap_or_else(|e| fatal(&format!("stalwart setup failed: {e}")));
 
-    if let Some(seed) = &case.seed {
-        seed_stalwart(&stalwart_dir, seed)
-            .unwrap_or_else(|e| fatal(&format!("stalwart seed failed: {e}")));
-    } else {
-        // Back-compat: if no seed block is provided, run the legacy seed script.
-        let seed_script = stalwart_dir.join("scripts/seed.sh");
-        run_cmd(Command::new(&seed_script).current_dir(&stalwart_dir))
-            .unwrap_or_else(|e| fatal(&format!("seed.sh failed: {e}")));
-    }
+    let cases = resolve_cases(&root_dir, &cli).unwrap_or_else(|e| fatal(&e));
 
-    // Ensure xin is built (debug) so we can execute it by path.
+    // Build once for all cases.
     run_cmd(
         Command::new("cargo")
             .current_dir(&root_dir)
@@ -192,6 +183,96 @@ fn main() {
 
     let xin_bin = root_dir.join("target/debug/xin");
 
+    let mut failed: Vec<String> = Vec::new();
+
+    for case_path in cases {
+        eprintln!("\n=== CASE: {} ===", case_path.display());
+
+        let case = read_case(&case_path).unwrap_or_else(|e| {
+            fatal(&format!("failed to read case {}: {e}", case_path.display()))
+        });
+
+        let fresh = cli.fresh || case.requires_fresh;
+
+        ensure_stalwart(&stalwart_dir, fresh)
+            .unwrap_or_else(|e| fatal(&format!("stalwart setup failed: {e}")));
+
+        if let Some(seed) = &case.seed {
+            seed_stalwart(&stalwart_dir, seed)
+                .unwrap_or_else(|e| fatal(&format!("stalwart seed failed: {e}")));
+        } else {
+            // Back-compat: if no seed block is provided, run the legacy seed script.
+            let seed_script = stalwart_dir.join("scripts/seed.sh");
+            run_cmd(Command::new(&seed_script).current_dir(&stalwart_dir))
+                .unwrap_or_else(|e| fatal(&format!("seed.sh failed: {e}")));
+        }
+
+        match run_case(&xin_bin, &case) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("FAILED: {}\n{e}", case.id);
+                failed.push(case.id);
+            }
+        }
+    }
+
+    if failed.is_empty() {
+        eprintln!("\nOK: all cases passed");
+        return;
+    }
+
+    eprintln!("\nFAIL: {} case(s) failed:", failed.len());
+    for id in failed {
+        eprintln!("- {id}");
+    }
+
+    std::process::exit(1);
+}
+
+fn resolve_cases(root_dir: &Path, cli: &Cli) -> Result<Vec<PathBuf>, String> {
+    if let Some(case) = &cli.case {
+        let case_path = if case.is_absolute() {
+            case.clone()
+        } else {
+            root_dir.join(case)
+        };
+        return Ok(vec![case_path]);
+    }
+
+    if cli.all {
+        let dir = cli
+            .case_dir
+            .as_ref()
+            .ok_or_else(|| "--all requires --case-dir".to_string())?;
+        let dir = if dir.is_absolute() {
+            dir.clone()
+        } else {
+            root_dir.join(dir)
+        };
+
+        let mut out: Vec<PathBuf> = Vec::new();
+        let entries = fs::read_dir(&dir).map_err(|e| format!("read_dir {dir:?}: {e}"))?;
+        for ent in entries {
+            let ent = ent.map_err(|e| format!("read_dir entry: {e}"))?;
+            let path = ent.path();
+            if !path.is_file() {
+                continue;
+            }
+            let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
+                continue;
+            };
+            if ext == "yaml" || ext == "yml" {
+                out.push(path);
+            }
+        }
+        out.sort();
+        return Ok(out);
+    }
+
+    Err("must provide --case <file> or --case-dir <dir> --all".to_string())
+}
+
+fn run_case(xin_bin: &Path, case: &Case) -> Result<(), String> {
     let run_id = generate_run_id();
     let mut ctx = Context {
         case_id: case.id.clone(),
@@ -207,11 +288,12 @@ fn main() {
 
         eprintln!("==> {}", step_name);
 
-        run_step(&xin_bin, &case.env, step, &mut ctx)
-            .unwrap_or_else(|e| fatal(&format!("{step_name} failed: {e}")));
+        run_step(xin_bin, &case.env, step, &mut ctx)
+            .map_err(|e| format!("{step_name} failed: {e}"))?;
     }
 
     eprintln!("OK: case '{}' (runId={})", ctx.case_id, ctx.run_id);
+    Ok(())
 }
 
 fn read_case(path: &Path) -> Result<Case, String> {
@@ -240,26 +322,28 @@ fn ensure_stalwart(stalwart_dir: &Path, fresh: bool) -> Result<(), String> {
         return Ok(());
     }
 
-    // Non-fresh: if the server is down, try starting it.
-    let seed = stalwart_dir.join("scripts/seed.sh");
-    let seed_status = Command::new(&seed)
-        .current_dir(stalwart_dir)
-        .status()
-        .map_err(|e| format!("run seed.sh: {e}"))?;
-
-    if seed_status.success() {
+    // Non-fresh: start (or keep) the docker service. `docker compose up -d` is idempotent.
+    let state_cfg = stalwart_dir.join(".state/opt-stalwart/etc/config.toml");
+    if !state_cfg.exists() {
+        let up = stalwart_dir.join("scripts/up.sh");
+        run_cmd(Command::new(&up).current_dir(stalwart_dir))?;
         return Ok(());
     }
 
-    let up = stalwart_dir.join("scripts/up.sh");
-    run_cmd(Command::new(&up).current_dir(stalwart_dir))?;
+    run_cmd(
+        Command::new("docker")
+            .current_dir(stalwart_dir)
+            .arg("compose")
+            .arg("up")
+            .arg("-d"),
+    )?;
 
     Ok(())
 }
 
 fn run_step(
     xin_bin: &Path,
-    env: &BTreeMap<String, String>,
+    case_env: &BTreeMap<String, String>,
     step: &Step,
     ctx: &mut Context,
 ) -> Result<(), String> {
@@ -270,7 +354,7 @@ fn run_step(
     let mut last_err: Option<String> = None;
 
     for attempt in 1..=attempts {
-        match run_step_once(xin_bin, env, step, ctx) {
+        match run_step_once(xin_bin, case_env, step, ctx) {
             Ok(()) => return Ok(()),
             Err(e) => {
                 last_err = Some(e);
@@ -287,7 +371,7 @@ fn run_step(
 
 fn run_step_once(
     xin_bin: &Path,
-    env: &BTreeMap<String, String>,
+    case_env: &BTreeMap<String, String>,
     step: &Step,
     ctx: &mut Context,
 ) -> Result<(), String> {
@@ -298,8 +382,14 @@ fn run_step_once(
         .map(|s| substitute(s, ctx))
         .collect::<Result<Vec<_>, _>>()?;
 
+    // Merge env: case env first, then step env overrides.
+    let mut merged_env: BTreeMap<String, String> = case_env.clone();
+    for (k, v) in &step.env {
+        merged_env.insert(k.clone(), v.clone());
+    }
+
     let mut cmd = Command::new(xin_bin);
-    for (k, v) in env {
+    for (k, v) in &merged_env {
         cmd.env(k, substitute(v, ctx)?);
     }
 
@@ -309,21 +399,29 @@ fn run_step_once(
         .map_err(|e| format!("spawn xin: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-    let value: serde_json::Value = serde_json::from_str(&stdout)
-        .map_err(|e| format!("stdout was not JSON envelope: {e}\nstdout:\n{stdout}"))?;
+    let value: serde_json::Value = serde_json::from_str(&stdout).map_err(|e| {
+        format!(
+            "stdout was not JSON envelope: {e}\nexit: {:?}\nstderr:\n{stderr}\nstdout:\n{stdout}",
+            output.status.code()
+        )
+    })?;
 
     // Expect ok by default.
     if step.expect_ok {
         let ok = value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
         if !ok {
-            return Err(format!("expected ok=true but got: {value}"));
+            return Err(format!(
+                "expected ok=true but got ok=false\nstdout:\n{stdout}\nstderr:\n{stderr}"
+            ));
         }
     }
 
     // Explicit assertions.
     for a in &step.expect {
-        assert_one(&value, a, ctx).map_err(|e| format!("assert {}: {e}", a.path))?;
+        assert_one(&value, a, ctx)
+            .map_err(|e| format!("assert {}: {e}\nstdout:\n{stdout}", a.path))?;
     }
 
     // Save variables.
@@ -331,11 +429,11 @@ fn run_step_once(
         let ptr = substitute(ptr, ctx)?;
         let v = value
             .pointer(&ptr)
-            .ok_or_else(|| format!("save var {var}: missing pointer {ptr}"))?;
+            .ok_or_else(|| format!("save var {var}: missing pointer {ptr}\nstdout:\n{stdout}"))?;
 
-        let s = v
-            .as_str()
-            .ok_or_else(|| format!("save var {var}: expected string at {ptr}, got {v}"))?;
+        let s = v.as_str().ok_or_else(|| {
+            format!("save var {var}: expected string at {ptr}, got {v}\nstdout:\n{stdout}")
+        })?;
 
         ctx.vars.insert(var.to_string(), s.to_string());
     }
@@ -423,8 +521,6 @@ fn run_cmd(cmd: &mut Command) -> Result<(), String> {
         Err(format!("command failed with exit code {status}"))
     }
 }
-
-// (no cmd_output helper; keep warnings clean)
 
 fn seed_stalwart(stalwart_dir: &Path, seed: &Seed) -> Result<(), String> {
     // Hard-coded local harness constants (kept in sync with tests/feature/stalwart).
@@ -548,8 +644,6 @@ fn smtp_inject(stalwart_dir: &Path, inj: &SmtpInject) -> Result<(), String> {
 
     run_cmd(&mut cmd)
 }
-
-// (removed) curl_http_code: unused
 
 fn curl_post_json_value(
     url: &str,
