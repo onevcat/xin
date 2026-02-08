@@ -4,6 +4,8 @@ mod error;
 mod output;
 mod config;
 mod jmap;
+mod backend;
+mod schema;
 
 use clap::Parser;
 

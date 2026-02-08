@@ -1,16 +1,14 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use chrono::{DateTime, Utc};
 use jmap_client::core::query::{Filter as CoreFilter, Operator};
 use jmap_client::email;
 use serde_json::{json, Value};
 
-use crate::cli::{
-    AttachmentArgs, GetArgs, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs, ThreadGetArgs,
-};
-use crate::config::{read_json_arg, RuntimeConfig};
+use crate::backend::Backend;
+use crate::cli::{MessagesSearchArgs, SearchArgs};
+use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
-use crate::jmap::XinJmap;
 use crate::output::{Envelope, Meta};
+use crate::schema;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 struct PageToken {
@@ -36,12 +34,6 @@ fn decode_page_token(s: &str) -> Result<PageToken, XinErrorOut> {
         .map_err(|e| XinErrorOut::usage(format!("invalid page token json: {e}")))
 }
 
-fn parse_rfc3339(s: &str) -> Result<DateTime<Utc>, XinErrorOut> {
-    DateTime::parse_from_rfc3339(s)
-        .map(|dt| dt.with_timezone(&Utc))
-        .map_err(|e| XinErrorOut::usage(format!("invalid rfc3339 datetime: {e}")))
-}
-
 fn parse_filter_value(v: &Value) -> Result<Option<CoreFilter<email::query::Filter>>, XinErrorOut> {
     let obj = match v.as_object() {
         Some(o) => o,
@@ -60,8 +52,6 @@ fn parse_filter_value(v: &Value) -> Result<Option<CoreFilter<email::query::Filte
 }
 
 fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorOut> {
-    // Operator form:
-    // {"operator":"AND"|"OR"|"NOT", "conditions":[ ... ] }
     if let Some(op) = v.get("operator").and_then(|v| v.as_str()) {
         let op = match op {
             "AND" => Operator::And,
@@ -88,8 +78,6 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
         .as_object()
         .ok_or_else(|| XinErrorOut::usage("filter condition must be an object".to_string()))?;
 
-    // A JSON filter condition can contain multiple fields at once; model that as AND of single-key
-    // conditions, since the typed enum represents one condition at a time.
     let mut parts: Vec<CoreFilter<email::query::Filter>> = Vec::new();
 
     for (k, vv) in obj {
@@ -141,18 +129,6 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
                     .ok_or_else(|| XinErrorOut::usage("text must be string".to_string()))?
                     .to_string(),
             },
-            "after" => email::query::Filter::After {
-                value: parse_rfc3339(
-                    vv.as_str()
-                        .ok_or_else(|| XinErrorOut::usage("after must be rfc3339 string".to_string()))?,
-                )?,
-            },
-            "before" => email::query::Filter::Before {
-                value: parse_rfc3339(
-                    vv.as_str()
-                        .ok_or_else(|| XinErrorOut::usage("before must be rfc3339 string".to_string()))?,
-                )?,
-            },
             "hasKeyword" => email::query::Filter::HasKeyword {
                 value: vv
                     .as_str()
@@ -165,7 +141,6 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
                     .ok_or_else(|| XinErrorOut::usage("notKeyword must be string".to_string()))?
                     .to_string(),
             },
-            // ignore unknown keys for now? no — be explicit.
             other => {
                 return Err(XinErrorOut::usage(format!(
                     "unsupported filter-json key: {other}"
@@ -183,49 +158,9 @@ fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorO
     }
 }
 
-fn email_to_item(e: &jmap_client::email::Email) -> Value {
-    let keywords = e
-        .keywords()
-        .iter()
-        .map(|k| (k.to_string(), Value::Bool(true)))
-        .collect::<serde_json::Map<String, Value>>();
-
-    let mailbox_ids = e
-        .mailbox_ids()
-        .iter()
-        .map(|id| (id.to_string(), Value::Bool(true)))
-        .collect::<serde_json::Map<String, Value>>();
-
-    let received_at = e
-        .received_at()
-        .and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0))
-        .map(|dt| dt.to_rfc3339());
-
-    let unread = !e.keywords().iter().any(|k| *k == "$seen");
-
-    json!({
-        "threadId": e.thread_id(),
-        "emailId": e.id(),
-        "receivedAt": received_at,
-        "subject": e.subject(),
-        "from": e.from(),
-        "to": e.to(),
-        "snippet": e.preview(),
-        "hasAttachment": e.has_attachment(),
-        "mailboxIds": mailbox_ids,
-        "keywords": keywords,
-        "unread": unread
-    })
-}
-
 pub async fn search(command_name: &str, account: Option<String>, args: &SearchArgs) -> Envelope<Value> {
-    let cfg = match RuntimeConfig::from_env() {
-        Ok(c) => c,
-        Err(e) => return Envelope::err(command_name, account, e),
-    };
-
-    let j = match XinJmap::connect(&cfg).await {
-        Ok(c) => c,
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
@@ -267,108 +202,18 @@ pub async fn search(command_name: &str, account: Option<String>, args: &SearchAr
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let mut req = j.client().build();
-
-    let q = req.query_email();
-    if let Some(f) = filter {
-        q.filter(f);
-    }
-    q.sort([
-        email::query::Comparator::received_at().is_ascending(is_ascending),
-    ]);
-    q.limit(limit);
-    q.position(position);
-    q.arguments().collapse_threads(collapse_threads);
-
-    let ids_ref = q.result_reference();
-
-    let g = req.get_email();
-    g.ids_ref(ids_ref);
-    g.properties([
-        jmap_client::email::Property::Id,
-        jmap_client::email::Property::ThreadId,
-        jmap_client::email::Property::ReceivedAt,
-        jmap_client::email::Property::Subject,
-        jmap_client::email::Property::From,
-        jmap_client::email::Property::To,
-        jmap_client::email::Property::Preview,
-        jmap_client::email::Property::HasAttachment,
-        jmap_client::email::Property::MailboxIds,
-        jmap_client::email::Property::Keywords,
-    ]);
-
-    let response = match req.send().await {
+    let result = match backend
+        .search(filter, position, limit, collapse_threads, is_ascending)
+        .await
+    {
         Ok(r) => r,
-        Err(e) => {
-            return Envelope::err(
-                command_name,
-                account,
-                XinErrorOut {
-                    kind: "jmapRequestError".to_string(),
-                    message: format!("request failed: {e}"),
-                    http: None,
-                    jmap: None,
-                },
-            )
-        }
+        Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let mut query_resp: Option<jmap_client::core::query::QueryResponse> = None;
-    let mut get_resp: Option<jmap_client::core::response::EmailGetResponse> = None;
-
-    for mr in response.unwrap_method_responses() {
-        if mr.is_type(jmap_client::Method::QueryEmail) {
-            if let Ok(r) = mr.unwrap_query_email() {
-                query_resp = Some(r);
-            }
-            continue;
-        }
-
-        if mr.is_type(jmap_client::Method::GetEmail) {
-            if let Ok(r) = mr.unwrap_get_email() {
-                get_resp = Some(r);
-            }
-            continue;
-        }
-    }
-
-    let query_resp = match query_resp {
-        Some(r) => r,
-        None => {
-            return Envelope::err(
-                command_name,
-                account,
-                XinErrorOut {
-                    kind: "jmapRequestError".to_string(),
-                    message: "missing Email/query response".to_string(),
-                    http: None,
-                    jmap: None,
-                },
-            )
-        }
-    };
-
-    let mut get_resp = match get_resp {
-        Some(r) => r,
-        None => {
-            return Envelope::err(
-                command_name,
-                account,
-                XinErrorOut {
-                    kind: "jmapRequestError".to_string(),
-                    message: "missing Email/get response".to_string(),
-                    http: None,
-                    jmap: None,
-                },
-            )
-        }
-    };
-
-    let emails = get_resp.take_list();
-    let items: Vec<Value> = emails.iter().map(email_to_item).collect();
+    let items = schema::email_summary_items(&result.emails);
 
     let mut meta = Meta::default();
-    if let Some(total) = query_resp.total() {
+    if let Some(total) = result.query.total() {
         let next_position = position + items.len() as i32;
         if next_position < total as i32 {
             meta.next_page = Some(encode_page_token(&PageToken {
@@ -398,11 +243,13 @@ pub async fn messages_search(account: Option<String>, args: &MessagesSearchArgs)
     search("messages.search", account, &search_args).await
 }
 
-pub async fn get(_args: &GetArgs) -> Envelope<Value> {
+// Stubs (until we implement full READ suite)
+
+pub async fn get(_args: &crate::cli::GetArgs) -> Envelope<Value> {
     Envelope::err("get", None, XinErrorOut::not_implemented("get not implemented yet"))
 }
 
-pub async fn thread_get(_args: &ThreadGetArgs) -> Envelope<Value> {
+pub async fn thread_get(_args: &crate::cli::ThreadGetArgs) -> Envelope<Value> {
     Envelope::err(
         "thread.get",
         None,
@@ -410,7 +257,7 @@ pub async fn thread_get(_args: &ThreadGetArgs) -> Envelope<Value> {
     )
 }
 
-pub async fn thread_attachments(_args: &ThreadAttachmentsArgs) -> Envelope<Value> {
+pub async fn thread_attachments(_args: &crate::cli::ThreadAttachmentsArgs) -> Envelope<Value> {
     Envelope::err(
         "thread.attachments",
         None,
@@ -418,7 +265,7 @@ pub async fn thread_attachments(_args: &ThreadAttachmentsArgs) -> Envelope<Value
     )
 }
 
-pub async fn attachment_download(_args: &AttachmentArgs) -> Envelope<Value> {
+pub async fn attachment_download(_args: &crate::cli::AttachmentArgs) -> Envelope<Value> {
     Envelope::err(
         "attachment",
         None,
