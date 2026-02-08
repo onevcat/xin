@@ -8,12 +8,43 @@ async fn search_works_against_mock_jmap() {
     let server = MockServer::start().await;
 
     let session = json!({
+        "capabilities": {
+            "urn:ietf:params:jmap:core": {
+                "maxSizeUpload": 1000000,
+                "maxConcurrentUpload": 4,
+                "maxSizeRequest": 1000000,
+                "maxConcurrentRequests": 4,
+                "maxCallsInRequest": 16,
+                "maxObjectsInGet": 256,
+                "maxObjectsInSet": 256,
+                "collationAlgorithms": ["i;unicode-casemap"]
+            },
+            "urn:ietf:params:jmap:mail": {},
+            "urn:ietf:params:jmap:submission": {}
+        },
+        "accounts": {
+            "A": {
+                "name": "mock",
+                "isPersonal": true,
+                "isReadOnly": false,
+                "accountCapabilities": {
+                    "urn:ietf:params:jmap:mail": {},
+                    "urn:ietf:params:jmap:core": {},
+                    "urn:ietf:params:jmap:submission": {}
+                }
+            }
+        },
+        "primaryAccounts": {
+            "urn:ietf:params:jmap:mail": "A",
+            "urn:ietf:params:jmap:core": "A",
+            "urn:ietf:params:jmap:submission": "A"
+        },
+        "username": "me",
         "apiUrl": format!("{}/jmap", server.uri()),
         "downloadUrl": format!("{}/download/{{accountId}}/{{blobId}}/{{name}}?type={{type}}", server.uri()),
         "uploadUrl": format!("{}/upload/{{accountId}}", server.uri()),
-        "primaryAccounts": {
-            "urn:ietf:params:jmap:mail": "A"
-        }
+        "eventSourceUrl": format!("{}/events", server.uri()),
+        "state": "s"
     });
 
     Mock::given(method("GET"))
@@ -23,6 +54,7 @@ async fn search_works_against_mock_jmap() {
         .await;
 
     let jmap_response = json!({
+        "sessionState": "s",
         "methodResponses": [
             ["Email/query", {
                 "accountId": "A",
@@ -31,7 +63,7 @@ async fn search_works_against_mock_jmap() {
                 "position": 0,
                 "ids": ["m1"],
                 "total": 1
-            }, "q1"],
+            }, "s0"],
             ["Email/get", {
                 "accountId": "A",
                 "state": "s",
@@ -48,7 +80,7 @@ async fn search_works_against_mock_jmap() {
                     "keywords": {"$seen": true}
                 }],
                 "notFound": []
-            }, "g1"]
+            }, "s1"]
         ]
     });
 
@@ -59,13 +91,19 @@ async fn search_works_against_mock_jmap() {
         .await;
 
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
-        .env("XIN_SESSION_URL", format!("{}/.well-known/jmap", server.uri()))
+        .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
         .args(["search", "--max", "10", "--filter-json", "{}"])
         .output()
         .expect("run");
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));

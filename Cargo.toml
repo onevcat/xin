@@ -11,9 +11,9 @@ thiserror = "1"
 
 base64 = { version = "0.22" }
 chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json"] }
+jmap-client = { version = "0.4", default-features = false, features = ["async"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-urlencoding = "2"
+url = "2"
 
 [dev-dependencies]
 assert_cmd = "2"

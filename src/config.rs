@@ -4,22 +4,34 @@ use crate::error::XinErrorOut;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
-    pub session_url: String,
+    /// Base URL that the JMAP client library will connect to (it will append `/.well-known/jmap`).
+    pub base_url: String,
+
     pub token: String,
+
+    /// Optional comma-separated redirect hosts allowlist (Fastmail may redirect session URL).
+    pub follow_redirect_hosts: Vec<String>,
 }
 
 impl RuntimeConfig {
     pub fn from_env() -> Result<Self, XinErrorOut> {
-        let session_url = std::env::var("XIN_SESSION_URL")
-            .or_else(|_| {
-                std::env::var("XIN_BASE_URL")
-                    .map(|base| format!("{}/.well-known/jmap", base.trim_end_matches('/')))
-            })
-            .map_err(|_| {
+        let base_url = if let Ok(base) = std::env::var("XIN_BASE_URL") {
+            base.trim_end_matches('/').to_string()
+        } else {
+            let session_url = std::env::var("XIN_SESSION_URL").map_err(|_| {
                 XinErrorOut::usage(
-                    "missing XIN_SESSION_URL (or XIN_BASE_URL) environment variable".to_string(),
+                    "missing XIN_BASE_URL (or XIN_SESSION_URL) environment variable".to_string(),
                 )
             })?;
+            let u = url::Url::parse(&session_url)
+                .map_err(|e| XinErrorOut::usage(format!("invalid XIN_SESSION_URL: {e}")))?;
+            format!(
+                "{}://{}{}",
+                u.scheme(),
+                u.host_str().unwrap_or(""),
+                u.port().map(|p| format!(":{p}")).unwrap_or_default()
+            )
+        };
 
         let token = match std::env::var("XIN_TOKEN") {
             Ok(v) => v,
@@ -36,7 +48,21 @@ impl RuntimeConfig {
             }
         };
 
-        Ok(Self { session_url, token })
+        let follow_redirect_hosts = std::env::var("XIN_TRUST_REDIRECT_HOSTS")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Ok(Self {
+            base_url,
+            token,
+            follow_redirect_hosts,
+        })
     }
 }
 

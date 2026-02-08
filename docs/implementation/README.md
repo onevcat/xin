@@ -11,6 +11,17 @@ Principles:
 - **No provider workarounds**: xin sends the standard request and surfaces server errors.
 - **One feature at a time**: implement Read-only MVP → Organize → Write.
 
+## Architecture note: CLI → stable adapter → client library
+
+To keep xin maintainable and swappable:
+
+- The CLI layer (`src/cli.rs`) should call a **thin, stable adapter interface** (aka wrapper/adapter) that exposes operations in xin terms (e.g. `search`, `get`, `thread_get`).
+- The adapter layer is responsible for using whatever JMAP client implementation we choose.
+  - **Current infra backend:** `stalwartlabs/jmap-client` (Rust crate `jmap-client`).
+  - Future: we may switch to a different client library, or even implement our own transport; the CLI should not need to change.
+
+This is intentionally a *thin* layer: it should not re-implement the full protocol, only normalize the parts xin needs and keep output/schema stable.
+
 Conventions used in examples:
 
 - `SESSION_URL`: user-provided JMAP session endpoint (e.g. `https://api.fastmail.com/.well-known/jmap`).
