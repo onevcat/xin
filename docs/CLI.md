@@ -384,6 +384,7 @@ Naming / aliasing (fixed):
 
 ### 3.3 `xin labels create <name> [--parent <mailboxId>] [--role <role>] [--subscribe true|false]`
 **gog analog:** `gog gmail labels create <name>`
+**JSON schema:** SCHEMA.md §5.3
 
 - Creates a mailbox via `Mailbox/set`.
 - Notes:
@@ -391,16 +392,19 @@ Naming / aliasing (fixed):
   - `--subscribe` maps to `isSubscribed`.
 
 ### 3.4 `xin labels rename <mailboxId> --name <newName>` (v0)
+**JSON schema:** SCHEMA.md §5.3
 
 - Convenience wrapper around `Mailbox/set` update.
 
 ### 3.5 `xin labels delete <mailboxId> [--remove-emails]` (v0)
+**JSON schema:** SCHEMA.md §5.3
 
 - Destroys a mailbox via `Mailbox/set` destroy.
 - If `--remove-emails` is set, xin sets `onDestroyRemoveEmails=true` (RFC 8621 `Mailbox/set`).
 - If `--remove-emails` is not set, xin uses the RFC default (`false`).
 
 ### 3.6 `xin labels modify <mailboxId> [--name <str>] [--parent <mailboxId|null>] [--sort-order <int>] [--subscribe true|false]` (v0)
+**JSON schema:** SCHEMA.md §5.3
 
 Gmail’s “modify labels on threads” does not map to JMAP.
 
@@ -499,6 +503,7 @@ This yields a deterministic RFC5322/MIME structure while remaining fully express
 
 ### 4.2 `xin drafts list|get|create|update|delete|send`
 **gog analog:** `gog gmail drafts ...`
+**JSON schema:** SCHEMA.md §7.3
 
 Drafts are emails in the Drafts mailbox.
 

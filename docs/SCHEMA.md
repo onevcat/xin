@@ -244,6 +244,21 @@ Notes:
 
 Returns a single `mailbox` object with the same fields.
 
+### 5.3 labels create/modify/delete
+
+For Mailbox/set-based commands, xin returns a summary of what the server reported:
+
+```json
+{
+  "created": [ { "id": "mbx1", "name": "A" } ],
+  "updated": [ { "id": "mbx2" } ],
+  "destroyed": [ "mbx3" ]
+}
+```
+
+Notes:
+- This is a normalized view of `Mailbox/set` results; xin may also include `raw` method responses when `--verbose` is set (TBD).
+
 ---
 
 ## 6) Organize outputs
@@ -286,6 +301,34 @@ For thread-level operations (`xin thread ...`), include:
   "submission": { "id": "S...", "sendAt": null },
   "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ]
 }
+```
+
+### 7.3 drafts
+
+All `xin drafts ...` commands use the same envelope; their `data` shapes are:
+
+- `drafts list`:
+
+```json
+{ "items": [ /* same item shape as SCHEMA.md §4.1 */ ] }
+```
+
+- `drafts get`:
+
+```json
+{ "draft": { /* same shape as SCHEMA.md §4.3 get.email */ }, "body": {"text": "...", "html": "..."}, "attachments": [] }
+```
+
+- `drafts create`:
+
+```json
+{ "draft": { "emailId": "M...", "threadId": "T..." }, "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ] }
+```
+
+- `drafts send`:
+
+```json
+{ "draft": { "emailId": "M...", "threadId": "T..." }, "submission": { "id": "S...", "sendAt": null } }
 ```
 
 ---
