@@ -34,6 +34,7 @@ impl<T> Envelope<T>
 where
     T: Serialize,
 {
+    #[allow(dead_code)]
     pub fn ok(command: impl Into<String>, account: Option<String>, data: T, meta: Meta) -> Self {
         Self {
             schema_version: "0.1".to_string(),

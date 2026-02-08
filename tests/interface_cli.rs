@@ -3,7 +3,7 @@ use predicates::prelude::*;
 
 #[test]
 fn help_mentions_key_commands() {
-    let mut cmd = Command::cargo_bin("xin").unwrap();
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("xin"));
     cmd.arg("--help");
 
     cmd.assert()
@@ -24,8 +24,7 @@ fn help_mentions_key_commands() {
 
 #[test]
 fn unimplemented_command_returns_structured_error() {
-    let output = Command::cargo_bin("xin")
-        .unwrap()
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .args(["labels", "list", "--json"])
         .output()
         .expect("run xin");

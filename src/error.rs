@@ -20,6 +20,7 @@ impl XinErrorOut {
         }
     }
 
+    #[allow(dead_code)]
     pub fn usage(message: impl Into<String>) -> Self {
         Self {
             kind: "xinUsageError".to_string(),
