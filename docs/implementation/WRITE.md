@@ -1,0 +1,181 @@
+# Implementation: WRITE
+
+Covers:
+
+- `xin identities list/get`
+- `xin send`
+- `xin drafts create/send`
+- attachment upload + reference
+
+References:
+- RFC 8620 §6.1 uploadUrl (binary upload)
+- RFC 8621 §4.6 Email/set (create draft)
+- RFC 8621 §7 EmailSubmission + EmailSubmission/set
+
+---
+
+## 0) Preconditions
+
+- Fetch Session → `apiUrl`, `uploadUrl`, `accountId`
+- Ensure `using` includes:
+  - `urn:ietf:params:jmap:core`
+  - `urn:ietf:params:jmap:mail`
+  - `urn:ietf:params:jmap:submission`
+
+Per RFC-first principle, xin sends the request; if the server rejects due to missing capability, surface the error.
+
+---
+
+## 1) `xin identities list`
+
+Use `Identity/get`.
+
+```json
+{
+  "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:submission"],
+  "methodCalls": [
+    ["Identity/get", {"accountId":"A", "ids": null}, "i1"]
+  ]
+}
+```
+
+Normalize to `SCHEMA.md §7.1`.
+
+---
+
+## 2) Upload attachments (RFC 8620 §6.1)
+
+For each `--attach <path>`:
+
+- POST to `uploadUrl{accountId}`
+- Set `Content-Type` header
+- Body: file bytes
+
+Response:
+
+```json
+{ "accountId": "A", "blobId": "B123", "type": "application/pdf", "size": 12345 }
+```
+
+Collect uploaded blobs into the output (`SCHEMA.md §7.2.uploaded`).
+
+---
+
+## 3) Create draft via Email/set (RFC 8621 §4.6)
+
+### 3.1 Build deterministic MIME structure (v0)
+
+- If plain+html: create a `multipart/alternative` as the body.
+- If any attachments exist: wrap in top-level `multipart/mixed` and append attachment parts.
+
+In JMAP terms:
+- Use `bodyStructure` (tree of EmailBodyPart)
+- Use `bodyValues` keyed by `partId` for text/html bodies
+- Use `blobId` for attachment parts (from upload)
+
+### 3.2 Email/set create
+
+Draft mailbox id should be resolved from role=`drafts` (or name fallback), then set membership.
+
+Example (simplified):
+
+```json
+{
+  "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],
+  "methodCalls": [
+    ["Email/set", {
+      "accountId": "A",
+      "create": {
+        "d1": {
+          "mailboxIds": {"<draftsMailboxId>": true},
+          "keywords": {"$draft": true},
+          "subject": "Hello",
+          "to": [{"name": null, "email": "you@example.com"}],
+          "bodyStructure": {
+            "type": "multipart/mixed",
+            "subParts": [
+              {
+                "type": "text/plain",
+                "partId": "p1"
+              },
+              {
+                "type": "application/pdf",
+                "blobId": "B123",
+                "name": "a.pdf",
+                "disposition": "attachment"
+              }
+            ]
+          },
+          "bodyValues": {
+            "p1": {"value": "hi"}
+          }
+        }
+      }
+    }, "e1"]
+  ]
+}
+```
+
+Important RFC constraints to respect (RFC 8621, Email/set creation rules):
+- do not set `headers` arrays; set header fields via top-level properties
+- do not include `Content-*` headers on Email; only on body parts
+- inside EmailBodyPart, use either `partId` (with bodyValues) OR `blobId` (not both)
+
+The response `created.d1.id` is the new draft emailId.
+
+---
+
+## 4) Send via EmailSubmission/set (RFC 8621 §7.5)
+
+Create an EmailSubmission referencing the emailId and an identityId.
+
+- If user passed `--identity`, pick that Identity.
+- Otherwise use the server’s default behavior (TBD: pick first identity returned).
+
+The RFC allows `envelope` to be null/omitted; server must derive recipients from headers.
+
+Example (combined request using backreference):
+
+```json
+{
+  "using": [
+    "urn:ietf:params:jmap:core",
+    "urn:ietf:params:jmap:mail",
+    "urn:ietf:params:jmap:submission"
+  ],
+  "methodCalls": [
+    ["Email/set", {"accountId":"A", "create": {"d1": { /* draft */ }}}, "e1"],
+    ["EmailSubmission/set", {
+      "accountId": "A",
+      "create": {
+        "s1": {
+          "identityId": "I123",
+          "emailId": "#e1/created/d1/id"
+        }
+      }
+    }, "s2"]
+  ]
+}
+```
+
+Normalize to `SCHEMA.md §7.2`.
+
+---
+
+## 5) Drafts send
+
+`xin drafts send <draftEmailId>` only needs EmailSubmission/set:
+
+```json
+{
+  "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:submission"],
+  "methodCalls": [
+    ["EmailSubmission/set", {
+      "accountId": "A",
+      "create": {
+        "s1": {"identityId": "I123", "emailId": "M_draft"}
+      }
+    }, "s1"]
+  ]
+}
+```

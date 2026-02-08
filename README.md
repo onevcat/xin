@@ -21,3 +21,4 @@
 - [Initial spec (overview)](docs/INITIAL.md)
 - [CLI contract (full flags/commands)](docs/CLI.md)
 - [JSON output schema (agent-first contract)](docs/SCHEMA.md)
+- [Implementation notes (RFC-first method plans)](docs/implementation/README.md)
