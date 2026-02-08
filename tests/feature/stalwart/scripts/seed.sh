@@ -45,20 +45,10 @@ wait_ready() {
 create_domain() {
   echo "Creating domain principal: $DOMAIN"
   api_json -X POST "$API/principal" -d "$(cat <<JSON
-{
-  \"type\": \"domain\",
-  \"name\": \"$DOMAIN\",
-  \"description\": \"xin local test domain\",
-  \"quota\": 0,
-  \"secrets\": [],
-  \"emails\": [],
-  \"memberOf\": [],
-  \"roles\": [],
-  \"lists\": [],
-  \"members\": []
-}
+{ "type": "domain", "name": "$DOMAIN" }
 JSON
-)" >/dev/null
+)"
+  echo
 }
 
 create_user() {
@@ -68,20 +58,10 @@ create_user() {
 
   echo "Creating user principal: $email"
   api_json -X POST "$API/principal" -d "$(cat <<JSON
-{
-  \"type\": \"individual\",
-  \"name\": \"$user\",
-  \"description\": \"xin local test user\",
-  \"quota\": 0,
-  \"secrets\": [\"$pass\"],
-  \"emails\": [\"$email\"],
-  \"memberOf\": [],
-  \"roles\": [\"user\"],
-  \"lists\": [\"all\"],
-  \"members\": []
-}
+{ "type": "individual", "name": "$user", "emails": ["$email"], "secrets": ["$pass"] }
 JSON
-)" >/dev/null
+)"
+  echo
 }
 
 wait_ready
