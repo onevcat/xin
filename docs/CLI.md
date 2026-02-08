@@ -294,12 +294,13 @@ Key RFC concepts:
 - Inbox/Trash/Archive/etc are **Mailboxes** (often identified via `Mailbox.role`).
 - Read/starred/etc are **keywords** (`$seen`, `$flagged`, ...).
 
-Sugar commands define a *client-side convention* for constructing standard `Email/set` updates:
+Sugar commands define a *client-side convention* for constructing standard `Email/set` updates.
+
+Mailbox roles referenced here are the lowercase versions of IMAP special-use attributes (RFC 6154 / IANA registry), e.g. `inbox`, `drafts`, `sent`, `trash`, `junk`, `archive`.
 
 - `xin archive <id>...`
-  - Convention: remove the Inbox mailbox membership.
-  - If the server has an `archive` role mailbox, xin MAY also add it.
-  - (If the resulting mailbox set would be invalid and the server rejects, xin surfaces the error.)
+  - RFC-style convention: remove membership of the mailbox with role `inbox`.
+  - If a mailbox with role `archive` exists, xin MAY also add it; otherwise archive is represented purely as “not in inbox”.
 
 - `xin read <id>...`
   - Add keyword `$seen`.
@@ -308,12 +309,15 @@ Sugar commands define a *client-side convention* for constructing standard `Emai
   - Remove keyword `$seen`.
 
 - `xin trash <id>...`
-  - Add Trash mailbox membership (role `trash`) and remove Inbox membership.
+  - RFC 8621 guidance for “delete to trash”: set `mailboxIds` to contain **only** the mailbox with role `trash` (i.e. remove all other mailbox memberships).
+  - (If the server rejects, xin surfaces the error.)
 
 Notes:
 - Accept both `emailId` and `threadId` where possible; xin can disambiguate via prefix:
   - `email:<id>` / `thread:<id>` (proposal)
-- Role mapping aliases (v0): treat `spam` as alias for role `junk` where present.
+- Role mapping aliases (v0):
+- treat `spam` as an alias for role `junk`.
+- treat `bin` as an alias for role `trash`.
 
 Notes:
 - Accept both `emailId` and `threadId` where possible; xin can disambiguate via prefix:
@@ -418,23 +422,35 @@ A single `xin send` invocation typically maps to one JMAP API request with multi
 CLI:
 - `--attach <path>` (repeatable)
 
-Rules:
-- xin uploads the file bytes as-is to the account upload endpoint (HTTP POST to `uploadUrl{accountId}`), setting `Content-Type` to the file MIME type.
+Rules (RFC-first):
+- xin uploads the file bytes as-is to the account upload endpoint (HTTP POST to `uploadUrl{accountId}`; RFC 8620 §6.1).
+- `Content-Type` is determined by xin (best-effort MIME sniffing; fallback `application/octet-stream`).
 - The upload response returns `{ blobId, type, size }`.
-- xin then constructs an `EmailBodyPart` per attachment:
+- xin constructs an `EmailBodyPart` per attachment:
   - `blobId`: from upload
-  - `type`: MIME type
-  - `name`: basename of the file (or explicit name TBD)
+  - `type`: from upload response (or the same MIME type used in upload)
+  - `name`: basename of the file
   - `disposition`: `"attachment"`
 
-Non-goals in v0 (TBD):
-- inline attachments (`cid:`), content-location/language, multipart/related authoring.
+**TBD (future flags):** overriding attachment name/type from CLI.
 
-### Text body authoring (v0)
+Non-goals in v0:
+- inline attachments (`cid:`), multipart/related authoring, content-location/language.
 
-- `--body/--body-file` produces one `text/plain` part.
-- `--body-html` produces one `text/html` part.
-- If both plain + html are supplied, xin MAY build a `multipart/alternative` inside the mixed root. (TBD: exact layout.)
+### Text body authoring (v0, fixed layout)
+
+Body inputs:
+- `--body <text>` (plain)
+- `--body-file <path|->` (plain; `-` reads stdin)
+- `--body-html <html>` (HTML)
+
+Layout rules:
+- If only plain is provided: message body is a single `text/plain` part.
+- If only HTML is provided: message body is a single `text/html` part.
+- If both plain + HTML are provided: message body is `multipart/alternative` with two subparts (`text/plain` then `text/html`).
+- If there are attachments: wrap the above body inside a top-level `multipart/mixed`, appending each attachment part after the body.
+
+This yields a deterministic RFC5322/MIME structure while remaining fully expressible via RFC 8621 `Email/set`.
 
 ### Error surfacing
 
