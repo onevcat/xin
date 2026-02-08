@@ -25,3 +25,4 @@ Files:
 - `ORGANIZE.md`: archive/read/trash and modify operations (Email/set patches), thread expansion.
 - `MAILBOXES.md`: labels/mailboxes (Mailbox/get|set).
 - `WRITE.md`: identities, uploadUrl blobs, Email/set draft creation, EmailSubmission/set send.
+- `LIBRARIES.md`: library survey and selection recommendations.
