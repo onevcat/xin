@@ -42,6 +42,25 @@ Cons / watchouts:
 
 Fit for xin: **Excellent**.
 
+#### Fastmail smoke test notes (stalwartlabs/jmap-client) — 2026-02-08
+
+A quick local smoke test was run against Fastmail using a dedicated API token, using a throwaway Rust harness under `/tmp` (not committed).
+
+What worked (read-only / verification):
+- Session connect via `https://api.fastmail.com` ✅
+- `Mailbox/query` resolving Inbox by `role=inbox` ✅
+- Single request: `Email/query` (`collapseThreads=true`, `receivedAt desc`, `limit=10`) + result reference → `Email/get` ✅
+- `Email/get` (headers/preview fields) ✅
+- Single request: `Thread/get` + result reference → `Email/get` ✅
+- `Identity/get` (submission capability) ✅
+- Blob download for an attachment (`download(blobId)`) ✅
+- Blob upload via `uploadUrl` (unreferenced test blob) ✅
+
+One small gotcha:
+- Fastmail may redirect the session URL, and the client refuses redirects to hosts that are not explicitly trusted.
+  - Fix: configure `follow_redirects(["api.fastmail.com", "jmap.fastmail.com", "fastmail.com", "www.fastmail.com"])` (exact allowlist TBD).
+  - For xin: treat this as a **policy** decision (e.g. default trust same-host, optionally allow additional hosts), not a provider-specific hack.
+
 ### 2) ~rockorager/go-jmap (Go)
 
 - URL: https://sr.ht/~rockorager/go-jmap
