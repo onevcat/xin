@@ -171,6 +171,12 @@ async fn thread_get_full_returns_per_email_full_items_and_warnings_are_prefixed(
 
     assert_eq!(warnings.len(), 1);
     let w0 = warnings[0].as_str().unwrap_or("");
-    assert!(w0.contains("emailId=m1:"), "warning should be prefixed: {w0}");
-    assert!(w0.contains("body.html truncated"), "warning should mention truncation: {w0}");
+    assert!(
+        w0.contains("emailId=m1:"),
+        "warning should be prefixed: {w0}"
+    );
+    assert!(
+        w0.contains("body.html truncated"),
+        "warning should mention truncation: {w0}"
+    );
 }

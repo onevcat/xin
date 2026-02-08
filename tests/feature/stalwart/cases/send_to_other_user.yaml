@@ -1,4 +1,5 @@
 id: send_to_other_user
+it: "alice sends to bob; bob can find it and fetch full/thread"
 requiresFresh: false
 
 seed:

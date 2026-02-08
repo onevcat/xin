@@ -1,4 +1,5 @@
 id: existing_big_attachment
+it: "reads an externally injected big HTML + big attachment message (truncation + download)"
 requiresFresh: true
 
 seed:

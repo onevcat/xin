@@ -37,6 +37,10 @@ struct Cli {
 struct Case {
     id: String,
 
+    /// Human-readable BDD-style description (like `it(...)`).
+    #[serde(default)]
+    it: Option<String>,
+
     #[serde(default, rename = "requiresFresh")]
     requires_fresh: bool,
 
@@ -194,11 +198,19 @@ fn main() {
     let mut failed: Vec<String> = Vec::new();
 
     for case_path in cases {
-        eprintln!("\n=== CASE: {} ===", case_path.display());
-
         let case = read_case(&case_path).unwrap_or_else(|e| {
             fatal(&format!("failed to read case {}: {e}", case_path.display()))
         });
+
+        let file = case_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("(case)");
+        if let Some(it) = &case.it {
+            eprintln!("\n=== CASE: {} — {} ===", file, it);
+        } else {
+            eprintln!("\n=== CASE: {} ===", file);
+        }
 
         let fresh = cli.fresh || case.requires_fresh;
 

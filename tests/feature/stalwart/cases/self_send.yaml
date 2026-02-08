@@ -1,4 +1,5 @@
 id: self_send
+it: "sends an email to self and can read it back via search/get/thread"
 requiresFresh: false
 
 seed:

@@ -21,6 +21,7 @@ cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases -
 Top-level fields:
 
 - `id: <string>`: stable case id.
+- `it: <string>` (optional): BDD-style human description shown in runner output.
 - `requiresFresh: <bool>`: if true, runner forces a fresh docker reset.
 - `env: { KEY: VALUE }`: environment variables for every `xin ...` invocation.
 - `seed`: Stalwart-only seed plan (domain + accounts + optional SMTP injection).
