@@ -176,6 +176,33 @@ Typical full request:
 
 Then normalize to `SCHEMA.md §4.3`.
 
+### Body selection strategy (v0, implemented)
+
+When `--format full` is used, xin requests `textBody`, `htmlBody`, and `bodyValues` (with `fetchTextBodyValues=true`, `fetchHTMLBodyValues=true`).
+
+Normalization rules (v0):
+
+- `data.body.text`:
+  - If `Email.textBody` exists and is non-empty, take **the first** part’s `partId`, and look up `Email.bodyValues[partId].value`.
+  - Otherwise set to `null`.
+- `data.body.html`:
+  - If `Email.htmlBody` exists and is non-empty, take **the first** part’s `partId`, and look up `Email.bodyValues[partId].value`.
+  - Otherwise set to `null`.
+- We do **not** concatenate multiple body parts in v0.
+  - (Future: we may join multiple parts with separators, but only if we can keep output stable and predictable.)
+
+Truncation surfacing (v0):
+
+- If `EmailBodyValue.isTruncated=true`, xin sets:
+  - `data.body.textMeta.isTruncated=true` (or `htmlMeta`)
+  - and adds a warning in `meta.warnings[]`.
+
+Attachments (v0):
+
+- `--format full` returns **attachment metadata only** in `data.attachments[]` (blobId/name/type/size/disposition).
+- It never embeds attachment bytes in JSON.
+- Callers must download via `xin attachment <emailId> <blobId> --out ...`.
+
 ---
 
 ## 5) `xin thread get <threadId>`
