@@ -126,3 +126,92 @@ steps:
     expect:
       - path: /data/email/mailboxIds/${trashMailboxId}
         equals: true
+
+  - name: batch-delete
+    say:
+      - "And batch delete can permanently destroy emails"
+    xin:
+      args:
+        - --force
+        - batch
+        - delete
+        - ${emailId}
+    expect:
+      - path: /data/deleted/0
+        equals: ${emailId}
+
+  - name: get-after-delete
+    say:
+      - "Then get should eventually report notFound"
+    retry:
+      attempts: 30
+      sleepMs: 500
+    expectOk: false
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /ok
+        equals: false
+      - path: /error/jmap/type
+        equals: notFound
+
+  - name: send-to-self-2
+    say:
+      - "And we can delete at thread level too"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] organize threaddelete"
+        - --text
+        - "hello 2"
+
+  - name: wait-visible-in-search-2
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:threaddelete
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: ${runId}
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId2: /data/items/0/emailId
+      threadId2: /data/items/0/threadId
+
+  - name: thread-delete
+    xin:
+      args:
+        - --force
+        - thread
+        - delete
+        - ${threadId2}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId2}
+
+  - name: get-after-thread-delete
+    retry:
+      attempts: 30
+      sleepMs: 500
+    expectOk: false
+    xin:
+      args:
+        - get
+        - ${emailId2}
+    expect:
+      - path: /error/jmap/type
+        equals: notFound

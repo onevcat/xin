@@ -340,13 +340,17 @@ Error behavior:
 
 - Same semantics as thread modify, but for individual emails.
 
-### 2.3 `xin batch delete <emailId>...`
+### 2.3 `xin batch delete <emailId>...` (v0)
 **gog analog:** `gog gmail batch delete` (permanent delete)
 
-- **Not recommended**. Prefer `xin trash`.
-- Should require `--force`.
+- **Destructive**: requires `--force`.
+- Uses `Email/set` destroy.
+- Some providers may not allow true delete beyond moving to Trash; xin will surface the standard error.
 
-**TBD:** some providers may not allow true delete beyond moving to Trash.
+### 2.4 `xin thread delete <threadId>` (v0)
+
+- **Destructive**: requires `--force`.
+- Expands the thread via `Thread/get` → obtains `emailIds` → destroys them via `Email/set` destroy.
 
 ### 2.4 Convenience commands (PLUS)
 

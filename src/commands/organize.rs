@@ -2,8 +2,8 @@ use serde_json::{Value, json};
 
 use crate::backend::{Backend, ModifyPlan};
 use crate::cli::{
-    ArchiveArgs, BatchModifyArgs, ReadArgs, ThreadArchiveArgs, ThreadModifyArgs, ThreadReadArgs,
-    ThreadTrashArgs, ThreadUnreadArgs, TrashArgs, UnreadArgs,
+    ArchiveArgs, BatchDeleteArgs, BatchModifyArgs, ReadArgs, ThreadArchiveArgs, ThreadDeleteArgs,
+    ThreadModifyArgs, ThreadReadArgs, ThreadTrashArgs, ThreadUnreadArgs, TrashArgs, UnreadArgs,
 };
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -231,6 +231,55 @@ pub async fn batch_modify(
     )
 }
 
+pub async fn batch_delete(
+    account: Option<String>,
+    args: &BatchDeleteArgs,
+    dry_run: bool,
+    force: bool,
+) -> Envelope<Value> {
+    let command_name = "batch.delete";
+
+    if !force {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("batch delete is destructive; pass --force".to_string()),
+        );
+    }
+
+    if args.email_ids.is_empty() {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("missing emailId".to_string()),
+        );
+    }
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    if !dry_run {
+        if let Err(e) = backend.destroy_emails(&args.email_ids).await {
+            return Envelope::err(command_name, account, e);
+        }
+    }
+
+    let deleted = args.email_ids.clone();
+
+    Envelope::ok(
+        command_name,
+        account,
+        json!({
+            "appliedTo": {"emailIds": args.email_ids},
+            "deleted": deleted,
+            "dryRun": dry_run
+        }),
+        Meta::default(),
+    )
+}
+
 pub async fn thread_modify(
     account: Option<String>,
     args: &ThreadModifyArgs,
@@ -449,6 +498,72 @@ pub async fn thread_trash(account: Option<String>, args: &ThreadTrashArgs, dry_r
     summary.added_mailboxes.push(trash_id);
 
     thread_sugar(&backend, command_name, account, &args.thread_id, plan, summary, dry_run).await
+}
+
+pub async fn thread_delete(
+    account: Option<String>,
+    args: &ThreadDeleteArgs,
+    dry_run: bool,
+    force: bool,
+) -> Envelope<Value> {
+    let command_name = "thread.delete";
+
+    if !force {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("thread delete is destructive; pass --force".to_string()),
+        );
+    }
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let email_ids = match backend.thread_email_ids(&args.thread_id).await {
+        Ok(Some(ids)) => ids,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::usage("thread not found".to_string()),
+            );
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let deleted = email_ids.clone();
+
+    if email_ids.is_empty() {
+        return Envelope::ok(
+            command_name,
+            account,
+            json!({
+                "appliedTo": {"threadId": args.thread_id, "emailIds": email_ids},
+                "deleted": deleted,
+                "dryRun": dry_run
+            }),
+            Meta::default(),
+        );
+    }
+
+    if !dry_run {
+        if let Err(e) = backend.destroy_emails(&email_ids).await {
+            return Envelope::err(command_name, account, e);
+        }
+    }
+
+    Envelope::ok(
+        command_name,
+        account,
+        json!({
+            "appliedTo": {"threadId": args.thread_id, "emailIds": email_ids},
+            "deleted": deleted,
+            "dryRun": dry_run
+        }),
+        Meta::default(),
+    )
 }
 
 pub async fn archive(account: Option<String>, args: &ArchiveArgs, dry_run: bool) -> Envelope<Value> {

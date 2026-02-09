@@ -195,6 +195,7 @@ pub enum ThreadCommand {
     Read(ThreadReadArgs),
     Unread(ThreadUnreadArgs),
     Trash(ThreadTrashArgs),
+    Delete(ThreadDeleteArgs),
 }
 
 #[derive(Args, Debug)]
@@ -250,6 +251,11 @@ pub struct ThreadUnreadArgs {
 
 #[derive(Args, Debug)]
 pub struct ThreadTrashArgs {
+    pub thread_id: String,
+}
+
+#[derive(Args, Debug)]
+pub struct ThreadDeleteArgs {
     pub thread_id: String,
 }
 

@@ -154,3 +154,19 @@ This keeps the CLI explicit while remaining convenient.
   - `dryRun: true`
   - `changes`: intended mailbox/keyword diffs
   - `appliedTo`: computed targets (expanded emailIds if needed)
+
+---
+
+## 5) Delete (permanent)
+
+Covers:
+- `xin batch delete <emailId>...`
+- `xin thread delete <threadId>`
+
+Implementation:
+- Use RFC 8621 `Email/set` with `destroy: ["M1", "M2", ...]`.
+- Thread delete expands via `Thread/get` → obtains `emailIds` → destroys them.
+
+Notes:
+- Delete is **destructive** and should require `--force`.
+- Some providers may reject true delete; xin surfaces the standard SetError.

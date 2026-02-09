@@ -39,6 +39,9 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Thread {
             command: ThreadCommand::Trash(args),
         } => organize::thread_trash(account.clone(), args, cli.dry_run).await,
+        Command::Thread {
+            command: ThreadCommand::Delete(args),
+        } => organize::thread_delete(account.clone(), args, cli.dry_run, cli.force).await,
         Command::Attachment(args) => read::attachment_download(args).await,
         Command::Archive(args) => organize::archive(account.clone(), args, cli.dry_run).await,
         Command::Read(args) => organize::read(account.clone(), args, cli.dry_run).await,
@@ -47,6 +50,9 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Batch {
             command: BatchCommand::Modify(args),
         } => organize::batch_modify(account.clone(), args, cli.dry_run).await,
+        Command::Batch {
+            command: BatchCommand::Delete(args),
+        } => organize::batch_delete(account.clone(), args, cli.dry_run, cli.force).await,
 
         Command::Labels { command: sub } => match sub {
             LabelsCommand::List(args) => labels::list("labels.list", account.clone(), args).await,
@@ -109,6 +115,7 @@ fn command_name(cmd: &Command) -> (String, Option<String>) {
             ThreadCommand::Read(_) => ("thread.read".to_string(), None),
             ThreadCommand::Unread(_) => ("thread.unread".to_string(), None),
             ThreadCommand::Trash(_) => ("thread.trash".to_string(), None),
+            ThreadCommand::Delete(_) => ("thread.delete".to_string(), None),
         },
         Command::Attachment(_) => ("attachment".to_string(), None),
         Command::Url(_) => ("url".to_string(), None),

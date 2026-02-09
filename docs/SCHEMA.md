@@ -298,7 +298,7 @@ Notes:
 
 ## 6) Organize outputs
 
-For `archive/read/unread/trash` and modify commands, xin should return:
+For `archive/read/unread/trash` and modify commands, xin returns:
 
 ```json
 {
@@ -309,6 +309,18 @@ For `archive/read/unread/trash` and modify commands, xin should return:
     "mailboxIds": {"added": ["..."], "removed": ["..."]},
     "keywords": {"added": ["$seen"], "removed": []}
   },
+  "dryRun": false
+}
+```
+
+For delete commands, xin returns:
+
+```json
+{
+  "appliedTo": {
+    "emailIds": ["M..."]
+  },
+  "deleted": ["M..."],
   "dryRun": false
 }
 ```
