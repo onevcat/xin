@@ -91,6 +91,12 @@ fn lex_tokens(input: &str) -> Result<Vec<Token>, XinErrorOut> {
                 .and_then(|s| s.strip_suffix(')'))
                 .unwrap_or("");
 
+            if inner.contains("or:(") {
+                return Err(XinErrorOut::usage(
+                    "nested or:(...) is not supported in v0".to_string(),
+                ));
+            }
+
             let parts = split_or_terms(inner)?;
             let mut terms: Vec<TermToken> = Vec::new();
             for p in parts {
@@ -124,9 +130,15 @@ fn parse_simple_term(token: &str) -> Result<(bool, Option<String>, String), XinE
     }
 
     // No parentheses grouping in v0.
+    if token.trim_start().starts_with("-(") {
+        return Err(XinErrorOut::usage(
+            "group negation `-(...)` is not supported in v0; negate individual terms (e.g. `-from:alice -subject:foo`) or use `--filter-json`".to_string(),
+        ));
+    }
+
     if s.starts_with('(') || s.ends_with(')') {
         return Err(XinErrorOut::usage(
-            "parentheses grouping is not supported in v0".to_string(),
+            "parentheses grouping is not supported in v0; use `or:(a|b|...)`, `-term`, or `--filter-json` for complex filters".to_string(),
         ));
     }
 

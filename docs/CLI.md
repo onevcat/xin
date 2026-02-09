@@ -163,19 +163,23 @@ xin sugar maps directly to this model:
 
 - AND: implicit by whitespace
   - Example: `from:github seen:false` → AND of two conditions (may be merged into a single FilterCondition object).
-- Grouping (AND): parentheses `(...)`
-  - Example: `(from:github subject:Kingfisher) in:INBOX`
 - OR: `or:( <expr> | <expr> | ... )`
   - Example: `or:(from:github | from:atlassian) seen:false`
-- NOT: prefix `-` for a term or group
-  - Example: `-in:Trash`, `-(from:spam subject:"sale")`
+- NOT: prefix `-` for a **single term**
+  - Example: `-in:Trash`, `-seen:true`
+
+Unsupported in v0 (will return a `xinUsageError`):
+- Parentheses grouping `(...)`
+- Group negation `-(...)`
+- Nested `or:(...)`
 
 Parsing/precedence rules (v0 implementation constraints):
 - OR exists **only** inside `or:(...)` (no bare `OR` keyword), to keep parsing deterministic.
 - `or:(...)` is **not nestable** in v0. Inside it, only simple terms are allowed.
-- NOT (`-`) applies to the **next simple term** in v0. Group negation `-(...)` is reserved for a future version.
-- Parentheses grouping is reserved for a future version. (We keep the mapping documented, but do not implement it in v0.)
+- NOT (`-`) applies to the **next simple term** in v0.
 - Quoted values `"..."` are supported for operator values (e.g. `subject:"foo bar"`).
+
+If you need full boolean expressions, use `--filter-json`.
 
 #### Compilation (examples)
 
@@ -215,17 +219,15 @@ OR composition (uses FilterOperator):
 }
 ```
 
-NOT composition (uses FilterOperator):
+NOT composition:
 
-- `-(from:spam subject:"sale")` →
-
-```json
-{ "operator": "NOT", "conditions": [ { "from": "spam", "subject": "sale" } ] }
-```
+- v0 supports NOT only for a single term via `-term` (e.g. `-in:Trash`).
+- Group negation `-(...)` is **not implemented** in v0.
 
 Notes:
 - `in:<...>` requires mailbox name→id resolution via `Mailbox/get`.
-- Time values must be RFC3339; sugar uses a date and xin expands it (timezone handling TBD; default local).
+- Time values:
+  - v0 accepts `YYYY-MM-DD` (expanded to `00:00:00Z`) or full RFC3339.
 - If both `<query>` and `--filter-json` are provided, `--filter-json` wins.
 - For AND-only expressions, xin MAY emit a single FilterCondition object with multiple properties (RFC 8621 states multiple properties are equivalent to AND).
 
