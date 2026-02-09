@@ -1,0 +1,111 @@
+id: labels_smoke
+it: "labels/mailboxes v0: list/get/create/rename/modify/delete"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: list-initial
+    xin:
+      args: [labels, list]
+    expect:
+      - path: /data/mailboxes/0/id
+        exists: true
+
+  - name: create
+    say:
+      - "When alice creates a new mailbox"
+    xin:
+      args:
+        - labels
+        - create
+        - "[xin-case:${caseId}:${runId}] MyFolder"
+        - --subscribe
+        - "true"
+    expect:
+      - path: /data/created/0/id
+        exists: true
+    save:
+      mailboxId: /data/created/0/id
+
+  - name: get-created
+    xin:
+      args:
+        - labels
+        - get
+        - ${mailboxId}
+    expect:
+      - path: /data/mailbox/id
+        equals: ${mailboxId}
+      - path: /data/mailbox/isSubscribed
+        equals: true
+
+  - name: rename
+    xin:
+      args:
+        - labels
+        - rename
+        - ${mailboxId}
+        - --name
+        - "[xin-case:${caseId}:${runId}] Renamed"
+    expect:
+      - path: /data/updated/0/id
+        equals: ${mailboxId}
+
+  - name: modify
+    xin:
+      args:
+        - labels
+        - modify
+        - ${mailboxId}
+        - --subscribe
+        - "false"
+        - --sort-order
+        - "5"
+    expect:
+      - path: /data/updated/0/id
+        equals: ${mailboxId}
+
+  - name: get-after-modify
+    xin:
+      args:
+        - labels
+        - get
+        - ${mailboxId}
+    expect:
+      - path: /data/mailbox/isSubscribed
+        equals: false
+      - path: /data/mailbox/sortOrder
+        equals: 5
+
+  - name: delete
+    xin:
+      args:
+        - labels
+        - delete
+        - ${mailboxId}
+    expect:
+      - path: /data/destroyed/0
+        equals: ${mailboxId}
+
+  - name: get-after-delete
+    expectOk: false
+    xin:
+      args:
+        - labels
+        - get
+        - ${mailboxId}
+    expect:
+      - path: /ok
+        equals: false
+      - path: /error/kind
+        exists: true

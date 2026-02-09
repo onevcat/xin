@@ -356,6 +356,13 @@ impl Backend {
             mailbox::Property::Id,
             mailbox::Property::Name,
             mailbox::Property::Role,
+            mailbox::Property::ParentId,
+            mailbox::Property::SortOrder,
+            mailbox::Property::TotalEmails,
+            mailbox::Property::UnreadEmails,
+            mailbox::Property::TotalThreads,
+            mailbox::Property::UnreadThreads,
+            mailbox::Property::IsSubscribed,
         ]);
         request
             .send_single::<jmap_client::core::response::MailboxGetResponse>()
@@ -364,6 +371,122 @@ impl Backend {
             .map_err(|e| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
                 message: format!("Mailbox/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn create_mailbox(
+        &self,
+        name: String,
+        parent_id: Option<String>,
+        role: Option<mailbox::Role>,
+        is_subscribed: Option<bool>,
+    ) -> Result<serde_json::Value, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let create = request.set_mailbox().create();
+        create.name(name.clone());
+        if let Some(pid) = parent_id {
+            create.parent_id(Some(pid));
+        }
+        if let Some(r) = role {
+            create.role(r);
+        }
+        if let Some(s) = is_subscribed {
+            create.is_subscribed(s);
+        }
+
+        let create_id = create.create_id().unwrap_or_else(|| "c0".to_string());
+
+        request
+            .send_single::<jmap_client::core::response::MailboxSetResponse>()
+            .await
+            .and_then(|mut r| r.created(&create_id))
+            .map(|mb| {
+                serde_json::json!({
+                    "id": mb.id().unwrap_or_default(),
+                    "name": mb.name().map(|s| s.to_string()).unwrap_or(name)
+                })
+            })
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/set(create) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn rename_mailbox(&self, mailbox_id: &str, name: &str) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        request.set_mailbox().update(mailbox_id).name(name.to_string());
+
+        request
+            .send_single::<jmap_client::core::response::MailboxSetResponse>()
+            .await
+            .and_then(|mut r| r.updated(mailbox_id).map(|_| ()))
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/set(update) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn modify_mailbox(
+        &self,
+        mailbox_id: &str,
+        name: Option<String>,
+        parent_id: Option<String>,
+        sort_order: Option<u32>,
+        is_subscribed: Option<bool>,
+    ) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        let update = request.set_mailbox().update(mailbox_id);
+
+        if let Some(name) = name {
+            update.name(name);
+        }
+        if let Some(pid) = parent_id {
+            update.parent_id(Some(pid));
+        }
+        if let Some(s) = sort_order {
+            update.sort_order(s);
+        }
+        if let Some(sub) = is_subscribed {
+            update.is_subscribed(sub);
+        }
+
+        request
+            .send_single::<jmap_client::core::response::MailboxSetResponse>()
+            .await
+            .and_then(|mut r| r.updated(mailbox_id).map(|_| ()))
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/set(update) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn destroy_mailbox(
+        &self,
+        mailbox_id: &str,
+        remove_emails: bool,
+    ) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        request
+            .set_mailbox()
+            .destroy([mailbox_id])
+            .arguments()
+            .on_destroy_remove_emails(remove_emails);
+
+        request
+            .send_single::<jmap_client::core::response::MailboxSetResponse>()
+            .await
+            .and_then(|mut r| r.destroyed(mailbox_id).map(|_| ()))
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/set(destroy) failed: {e}"),
                 http: None,
                 jmap: None,
             })

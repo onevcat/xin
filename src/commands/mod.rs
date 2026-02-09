@@ -2,6 +2,7 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
+mod labels;
 mod organize;
 mod read;
 mod send;
@@ -46,6 +47,24 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Batch {
             command: BatchCommand::Modify(args),
         } => organize::batch_modify(account.clone(), args, cli.dry_run).await,
+
+        Command::Labels { command: sub } => match sub {
+            LabelsCommand::List(args) => labels::list("labels.list", account.clone(), args).await,
+            LabelsCommand::Get(args) => labels::get("labels.get", account.clone(), args).await,
+            LabelsCommand::Create(args) => labels::create("labels.create", account.clone(), args).await,
+            LabelsCommand::Rename(args) => labels::rename("labels.rename", account.clone(), args).await,
+            LabelsCommand::Delete(args) => labels::delete("labels.delete", account.clone(), args).await,
+            LabelsCommand::Modify(args) => labels::modify("labels.modify", account.clone(), args).await,
+        },
+        Command::Mailboxes { command: sub } => match sub {
+            LabelsCommand::List(args) => labels::list("mailboxes.list", account.clone(), args).await,
+            LabelsCommand::Get(args) => labels::get("mailboxes.get", account.clone(), args).await,
+            LabelsCommand::Create(args) => labels::create("mailboxes.create", account.clone(), args).await,
+            LabelsCommand::Rename(args) => labels::rename("mailboxes.rename", account.clone(), args).await,
+            LabelsCommand::Delete(args) => labels::delete("mailboxes.delete", account.clone(), args).await,
+            LabelsCommand::Modify(args) => labels::modify("mailboxes.modify", account.clone(), args).await,
+        },
+
         Command::Identities {
             command: IdentitiesCommand::List,
         } => send::identities_list(account.clone()).await,
