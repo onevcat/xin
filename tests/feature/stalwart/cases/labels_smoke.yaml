@@ -12,6 +12,7 @@ env:
   XIN_BASE_URL: http://127.0.0.1:39090
   XIN_BASIC_USER: alice
   XIN_BASIC_PASS: alice-pass
+  XIN_DEBUG_RESOLUTION: "true"
 
 steps:
   - name: list-initial
@@ -48,6 +49,8 @@ steps:
         equals: ${mailboxId}
       - path: /data/mailbox/isSubscribed
         equals: true
+      - path: /meta/debug/labelsGet/mode
+        equals: mailboxGetById
 
   - name: rename
     xin:

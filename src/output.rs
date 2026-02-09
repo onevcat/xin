@@ -12,6 +12,10 @@ pub struct Meta {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<String>>,
+
+    /// Optional debug payload, only present when debug env flags are enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]

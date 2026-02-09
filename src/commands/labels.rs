@@ -163,14 +163,30 @@ pub async fn get(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
 
+    let debug_resolution = std::env::var("XIN_DEBUG_RESOLUTION")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     if looks_like_id && !is_role_alias {
         match backend.get_mailbox(needle).await {
             Ok(Some(m)) => {
+                let mut meta = Meta::default();
+                if debug_resolution {
+                    meta.debug = Some(json!({
+                        "labelsGet": {
+                            "mode": "mailboxGetById",
+                            "input": needle,
+                            "resolvedId": m.id()
+                        }
+                    }));
+                }
+
                 return Envelope::ok(
                     command_name,
                     account,
                     json!({"mailbox": mailbox_to_json(&m)}),
-                    Meta::default(),
+                    meta,
                 );
             }
             Ok(None) => {
@@ -201,12 +217,25 @@ pub async fn get(
         .find(|m| m.id() == Some(id.as_str()));
 
     match mailbox {
-        Some(m) => Envelope::ok(
-            command_name,
-            account,
-            json!({"mailbox": mailbox_to_json(&m)}),
-            Meta::default(),
-        ),
+        Some(m) => {
+            let mut meta = Meta::default();
+            if debug_resolution {
+                meta.debug = Some(json!({
+                    "labelsGet": {
+                        "mode": "listResolve",
+                        "input": needle,
+                        "resolvedId": id
+                    }
+                }));
+            }
+
+            Envelope::ok(
+                command_name,
+                account,
+                json!({"mailbox": mailbox_to_json(&m)}),
+                meta,
+            )
+        }
         None => Envelope::err(
             command_name,
             account,
