@@ -2,6 +2,7 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
+mod organize;
 mod read;
 mod send;
 
@@ -22,8 +23,46 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Thread {
             command: ThreadCommand::Attachments(args),
         } => read::thread_attachments(args).await,
+        Command::Thread {
+            command: ThreadCommand::Modify(args),
+        } => organize::thread_modify(account.clone(), args, cli.dry_run).await,
+        Command::Thread {
+            command: ThreadCommand::Archive(args),
+        } => organize::thread_archive(account.clone(), args, cli.dry_run).await,
+        Command::Thread {
+            command: ThreadCommand::Read(args),
+        } => organize::thread_read(account.clone(), args, cli.dry_run).await,
+        Command::Thread {
+            command: ThreadCommand::Unread(args),
+        } => organize::thread_unread(account.clone(), args, cli.dry_run).await,
+        Command::Thread {
+            command: ThreadCommand::Trash(args),
+        } => organize::thread_trash(account.clone(), args, cli.dry_run).await,
         Command::Attachment(args) => read::attachment_download(args).await,
+        Command::Archive(args) => organize::archive(account.clone(), args, cli.dry_run).await,
+        Command::Read(args) => organize::read(account.clone(), args, cli.dry_run).await,
+        Command::Unread(args) => organize::unread(account.clone(), args, cli.dry_run).await,
+        Command::Trash(args) => organize::trash(account.clone(), args, cli.dry_run).await,
+        Command::Batch {
+            command: BatchCommand::Modify(args),
+        } => organize::batch_modify(account.clone(), args, cli.dry_run).await,
+        Command::Identities {
+            command: IdentitiesCommand::List,
+        } => send::identities_list(account.clone()).await,
+        Command::Identities {
+            command: IdentitiesCommand::Get(args),
+        } => send::identities_get(account.clone(), args).await,
+
         Command::Send(args) => send::send(account.clone(), args).await,
+
+        Command::Drafts { command: sub } => match sub {
+            DraftsCommand::List(args) => send::drafts_list(account.clone(), args).await,
+            DraftsCommand::Get(args) => send::drafts_get(account.clone(), args).await,
+            DraftsCommand::Create(args) => send::drafts_create(account.clone(), args).await,
+            DraftsCommand::Delete(args) => send::drafts_delete(account.clone(), args).await,
+            DraftsCommand::Send(args) => send::drafts_send(account.clone(), args).await,
+            DraftsCommand::Update(args) => send::drafts_update(account.clone(), args).await,
+        },
 
         _ => {
             let (command, _details) = command_name(&cli.command);

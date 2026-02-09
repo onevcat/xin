@@ -261,17 +261,23 @@ pub async fn search(
     let items = schema::email_summary_items(&result.emails);
 
     let mut meta = Meta::default();
-    if let Some(total) = result.query.total() {
-        let next_position = position + items.len() as i32;
-        if next_position < total as i32 {
-            meta.next_page = Some(encode_page_token(&PageToken {
-                position: next_position,
-                limit,
-                collapse_threads,
-                is_ascending,
-                filter: stable_filter_json,
-            }));
-        }
+    let next_position = position + items.len() as i32;
+
+    // Prefer `total` when available, but don't require it.
+    // Some servers omit `total` even though they support paging via position/limit.
+    let has_more = match result.query.total() {
+        Some(total) => next_position < total as i32,
+        None => items.len() == limit,
+    };
+
+    if has_more {
+        meta.next_page = Some(encode_page_token(&PageToken {
+            position: next_position,
+            limit,
+            collapse_threads,
+            is_ascending,
+            filter: stable_filter_json,
+        }));
     }
 
     Envelope::ok(command_name, account, json!({"items": items}), meta)

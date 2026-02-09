@@ -25,6 +25,23 @@ pub struct Backend {
     j: XinJmap,
 }
 
+#[derive(Debug, Clone)]
+pub struct UploadedBlob {
+    pub blob_id: String,
+    pub content_type: String,
+    pub size: usize,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ModifyPlan {
+    pub add_mailboxes: Vec<String>,
+    pub remove_mailboxes: Vec<String>,
+    pub add_keywords: Vec<String>,
+    pub remove_keywords: Vec<String>,
+    pub replace_mailboxes: Option<Vec<String>>,
+}
+
 impl Backend {
     pub async fn connect() -> Result<Self, XinErrorOut> {
         let cfg = crate::config::RuntimeConfig::from_env()?;
@@ -374,36 +391,75 @@ impl Backend {
             })
     }
 
-    pub async fn create_text_email(
+    pub async fn upload_blob(
+        &self,
+        bytes: Vec<u8>,
+        content_type: Option<&str>,
+        name: Option<String>,
+    ) -> Result<UploadedBlob, XinErrorOut> {
+        let r = self
+            .j
+            .client()
+            .upload(None, bytes, content_type)
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("upload failed: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        Ok(UploadedBlob {
+            blob_id: r.blob_id().to_string(),
+            content_type: r.content_type().to_string(),
+            size: r.size(),
+            name,
+        })
+    }
+
+    pub async fn create_draft_email(
         &self,
         mailbox_id: &str,
         from_name: Option<String>,
         from_email: String,
         to: &[String],
-        subject: &str,
-        text: &str,
+        cc: &[String],
+        bcc: &[String],
+        subject: Option<&str>,
+        text: Option<&str>,
+        html: Option<&str>,
+        attachments: &[UploadedBlob],
     ) -> Result<Email, XinErrorOut> {
         let mut request = self.j.client().build();
         let create = request.set_email().create();
         create.mailbox_ids([mailbox_id.to_string()]);
+        create.keyword("$draft", true);
 
         if let Some(name) = from_name {
             create.from([(name, from_email.clone())]);
         } else {
             create.from([from_email.clone()]);
         }
-        create.to(to.iter().map(|addr| addr.as_str()));
-        create.subject(subject.to_string());
 
-        let part_id = "text";
-        let text_part = jmap_client::email::EmailBodyPart::new()
-            .part_id(part_id)
-            .content_type("text/plain");
+        if !to.is_empty() {
+            create.to(to.iter().map(|addr| addr.as_str()));
+        }
+        if !cc.is_empty() {
+            create.cc(cc.iter().map(|addr| addr.as_str()));
+        }
+        if !bcc.is_empty() {
+            create.bcc(bcc.iter().map(|addr| addr.as_str()));
+        }
+        if let Some(s) = subject {
+            create.subject(s.to_string());
+        }
 
-        // Stalwart rejects setting both textBody and bodyStructure on Email/set.
-        // For a simple text/plain send, keep it minimal: textBody + bodyValues.
-        create.text_body(text_part);
-        create.body_value(part_id.to_string(), text);
+        let (root, body_values) = build_email_body(text, html, attachments);
+
+        create.body_structure(root.into());
+        for (id, value) in body_values {
+            create.body_value(id, value);
+        }
 
         let create_id = create
             .create_id()
@@ -416,6 +472,155 @@ impl Backend {
             .map_err(|e| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
                 message: format!("Email/set failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn update_draft_email(
+        &self,
+        email_id: &str,
+        from_name: Option<String>,
+        from_email: Option<String>,
+        to: Option<&[String]>,
+        cc: Option<&[String]>,
+        bcc: Option<&[String]>,
+        subject: Option<&str>,
+        text: Option<&str>,
+        html: Option<&str>,
+        attachments: Option<&[UploadedBlob]>,
+    ) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        let update = request.set_email().update(email_id.to_string());
+
+        // Ensure it remains a draft.
+        update.keyword("$draft", true);
+
+        if let Some(email) = from_email {
+            if let Some(name) = from_name {
+                update.from([(name, email)]);
+            } else {
+                update.from([email]);
+            }
+        }
+
+        if let Some(to) = to {
+            update.to(to.iter().map(|addr| addr.as_str()));
+        }
+        if let Some(cc) = cc {
+            update.cc(cc.iter().map(|addr| addr.as_str()));
+        }
+        if let Some(bcc) = bcc {
+            update.bcc(bcc.iter().map(|addr| addr.as_str()));
+        }
+
+        if let Some(s) = subject {
+            update.subject(s.to_string());
+        }
+
+        if text.is_some() || html.is_some() || attachments.is_some() {
+            let atts: &[UploadedBlob] = attachments.unwrap_or(&[]);
+            let (root, body_values) = build_email_body(text, html, atts);
+
+            update.body_structure(root.into());
+            for (id, value) in body_values {
+                update.body_value(id, value);
+            }
+        }
+
+        request
+            .send_single::<jmap_client::core::response::EmailSetResponse>()
+            .await
+            .and_then(|mut r| r.updated(email_id).map(|_| ()))
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/set(update) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn modify_emails(
+        &self,
+        email_ids: &[String],
+        plan: &ModifyPlan,
+    ) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        let set = request.set_email();
+
+        for id in email_ids {
+            let update = set.update(id.to_string());
+
+            if let Some(repl) = &plan.replace_mailboxes {
+                update.mailbox_ids(repl.clone());
+            } else {
+                for mb in &plan.add_mailboxes {
+                    update.mailbox_id(mb, true);
+                }
+                for mb in &plan.remove_mailboxes {
+                    update.mailbox_id(mb, false);
+                }
+            }
+
+            for kw in &plan.add_keywords {
+                update.keyword(kw, true);
+            }
+            for kw in &plan.remove_keywords {
+                update.keyword(kw, false);
+            }
+        }
+
+        request
+            .send_single::<jmap_client::core::response::EmailSetResponse>()
+            .await
+            .map(|_| ())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/set(update) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn thread_email_ids(
+        &self,
+        thread_id: &str,
+    ) -> Result<Option<Vec<String>>, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let t = request.get_thread();
+        t.ids([thread_id]);
+        t.properties([thread::Property::Id, thread::Property::EmailIds]);
+
+        request
+            .send_single::<jmap_client::core::response::ThreadGetResponse>()
+            .await
+            .map(|mut r| {
+                r.take_list().into_iter().next().map(|t| {
+                    t.email_ids()
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                })
+            })
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Thread/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn destroy_emails(&self, email_ids: &[String]) -> Result<(), XinErrorOut> {
+        let mut request = self.j.client().build();
+        request.set_email().destroy(email_ids.iter().map(|s| s.as_str()));
+
+        request
+            .send_single::<jmap_client::core::response::EmailSetResponse>()
+            .await
+            .map(|_| ())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/set(destroy) failed: {e}"),
                 http: None,
                 jmap: None,
             })
@@ -438,3 +643,96 @@ impl Backend {
             })
     }
 }
+
+fn build_email_body(
+    text: Option<&str>,
+    html: Option<&str>,
+    attachments: &[UploadedBlob],
+) -> (
+    jmap_client::email::EmailBodyPart<jmap_client::Set>,
+    Vec<(String, String)>,
+) {
+    type PartSet = jmap_client::email::EmailBodyPart<jmap_client::Set>;
+
+    let mut body_values: Vec<(String, String)> = Vec::new();
+
+    let body_part: Option<PartSet> = match (text, html) {
+        (Some(t), Some(h)) => {
+            let alt = jmap_client::email::EmailBodyPart::new()
+                .content_type("multipart/alternative")
+                .sub_part(
+                    jmap_client::email::EmailBodyPart::new()
+                        .part_id("text")
+                        .content_type("text/plain")
+                        .into(),
+                )
+                .sub_part(
+                    jmap_client::email::EmailBodyPart::new()
+                        .part_id("html")
+                        .content_type("text/html")
+                        .into(),
+                );
+
+            body_values.push(("text".to_string(), t.to_string()));
+            body_values.push(("html".to_string(), h.to_string()));
+
+            Some(alt)
+        }
+        (Some(t), None) => {
+            body_values.push(("text".to_string(), t.to_string()));
+            Some(
+                jmap_client::email::EmailBodyPart::new()
+                    .part_id("text")
+                    .content_type("text/plain"),
+            )
+        }
+        (None, Some(h)) => {
+            body_values.push(("html".to_string(), h.to_string()));
+            Some(
+                jmap_client::email::EmailBodyPart::new()
+                    .part_id("html")
+                    .content_type("text/html"),
+            )
+        }
+        (None, None) => None,
+    };
+
+    // If body is omitted (attachments-only draft), create an empty text/plain body.
+    if body_part.is_none() {
+        body_values.push(("text".to_string(), "".to_string()));
+    }
+
+    let root: PartSet = if !attachments.is_empty() {
+        let mut mixed = jmap_client::email::EmailBodyPart::new().content_type("multipart/mixed");
+
+        mixed = mixed.sub_part(
+            body_part
+                .unwrap_or_else(|| {
+                    jmap_client::email::EmailBodyPart::new()
+                        .part_id("text")
+                        .content_type("text/plain")
+                })
+                .into(),
+        );
+
+        for a in attachments {
+            let mut p = jmap_client::email::EmailBodyPart::new()
+                .blob_id(a.blob_id.clone())
+                .content_type(a.content_type.clone());
+            if let Some(name) = &a.name {
+                p = p.name(name.clone());
+            }
+            mixed = mixed.sub_part(p.into());
+        }
+        mixed
+    } else {
+        body_part.unwrap_or_else(|| {
+            jmap_client::email::EmailBodyPart::new()
+                .part_id("text")
+                .content_type("text/plain")
+        })
+    };
+
+    (root, body_values)
+}
+

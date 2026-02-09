@@ -420,14 +420,34 @@ pub struct IdentitiesGetArgs {
 
 #[derive(Args, Debug)]
 pub struct SendArgs {
+    /// Recipient(s). Can be specified multiple times.
     #[arg(long, required = true, num_args = 1..)]
     pub to: Vec<String>,
 
     #[arg(long)]
     pub subject: String,
 
+    /// Plain text body. Supports @/path/to/file.txt
     #[arg(long)]
-    pub text: String,
+    pub text: Option<String>,
+
+    /// HTML body. Supports @/path/to/file.html
+    #[arg(long = "body-html")]
+    pub body_html: Option<String>,
+
+    #[arg(long)]
+    pub cc: Vec<String>,
+
+    #[arg(long)]
+    pub bcc: Vec<String>,
+
+    /// Add attachment(s) by local file path.
+    #[arg(long = "attach")]
+    pub attach: Vec<String>,
+
+    /// Identity to send as (id or email).
+    #[arg(long)]
+    pub identity: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -490,6 +510,43 @@ pub struct DraftsCreateArgs {
 #[derive(Args, Debug)]
 pub struct DraftsUpdateArgs {
     pub draft_email_id: String,
+
+    #[arg(long, num_args = 1..)]
+    pub to: Option<Vec<String>>,
+
+    #[arg(long)]
+    pub subject: Option<String>,
+
+    #[arg(long)]
+    pub body: Option<String>,
+
+    #[arg(long = "body-file")]
+    pub body_file: Option<String>,
+
+    #[arg(long = "body-html")]
+    pub body_html: Option<String>,
+
+    #[arg(long, num_args = 1..)]
+    pub cc: Option<Vec<String>>,
+
+    #[arg(long, num_args = 1..)]
+    pub bcc: Option<Vec<String>>,
+
+    /// Add attachment(s) by local file path.
+    #[arg(long = "attach")]
+    pub attach: Vec<String>,
+
+    /// Replace existing attachments (default: append).
+    #[arg(long)]
+    pub replace_attachments: bool,
+
+    /// Remove all attachments.
+    #[arg(long)]
+    pub clear_attachments: bool,
+
+    /// Update From identity for this draft (id or email).
+    #[arg(long)]
+    pub identity: Option<String>,
 }
 
 #[derive(Args, Debug)]
