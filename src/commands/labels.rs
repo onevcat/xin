@@ -163,10 +163,11 @@ pub async fn get(
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
 
-    let debug_resolution = std::env::var("XIN_DEBUG_RESOLUTION")
-        .ok()
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let debug_resolution = crate::debug::verbose()
+        || std::env::var("XIN_DEBUG_RESOLUTION")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
     if looks_like_id && !is_role_alias {
         match backend.get_mailbox(needle).await {

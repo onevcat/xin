@@ -52,6 +52,9 @@ Common optional fields:
 - `requestId`: string|null (xin-generated)
 - `nextPage`: string|null (opaque cursor for `--page`)
 - `warnings`: string[]|null
+- `debug`: object|null
+  - Only present when `--verbose` (or debug env flags) are enabled.
+  - **Not stable**: intended for humans/tests; agents should not depend on its shape.
   - Example: body truncation warnings for `get --format full` when `maxBodyValueBytes` is exceeded.
 
 ---
