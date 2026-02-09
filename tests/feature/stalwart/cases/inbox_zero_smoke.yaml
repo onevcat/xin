@@ -1,0 +1,74 @@
+id: inbox_zero_smoke
+it: "inbox next + inbox do (archive) works end-to-end (inbound mail)"
+requiresFresh: true
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+  smtpInject:
+    - authUser: bob
+      authPass: bob-pass
+      mailFrom: bob@example.org
+      rcptTo: [alice@example.org]
+      emlFile: tests/feature/stalwart/fixtures/inboxzero.eml
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: create-archive
+    expectOk: false
+    xin:
+      args:
+        - labels
+        - create
+        - Archive
+        - --role
+        - archive
+
+  - name: inbox-next
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - inbox
+        - next
+        - --all
+        - subject:inboxzero
+    expect:
+      - path: /data/item/emailId
+        exists: true
+      - path: /data/item/subject
+        contains: inboxzero
+    save:
+      emailId: /data/item/emailId
+
+  - name: inbox-do-archive
+    xin:
+      args:
+        - inbox
+        - do
+        - ${emailId}
+        - archive
+
+  - name: ensure-not-in-inbox
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - "subject:inboxzero in:inbox"
+        - --max
+        - "5"
+    expect:
+      - path: /data/items
+        equals: []

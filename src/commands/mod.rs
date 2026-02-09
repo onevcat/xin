@@ -2,6 +2,7 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
+mod inbox;
 mod labels;
 mod organize;
 mod read;
@@ -53,6 +54,11 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Batch {
             command: BatchCommand::Delete(args),
         } => organize::batch_delete(account.clone(), args, cli.dry_run, cli.force).await,
+
+        Command::Inbox { command: sub } => match sub {
+            InboxCommand::Next(args) => inbox::next(account.clone(), args).await,
+            InboxCommand::Do(args) => inbox::do_action(account.clone(), args, cli.dry_run).await,
+        },
 
         Command::Labels { command: sub } => match sub {
             LabelsCommand::List(args) => labels::list("labels.list", account.clone(), args).await,
@@ -126,6 +132,10 @@ fn command_name(cmd: &Command) -> (String, Option<String>) {
         Command::Batch { command: sub } => match sub {
             BatchCommand::Modify(_) => ("batch.modify".to_string(), None),
             BatchCommand::Delete(_) => ("batch.delete".to_string(), None),
+        },
+        Command::Inbox { command: sub } => match sub {
+            InboxCommand::Next(_) => ("inbox.next".to_string(), None),
+            InboxCommand::Do(_) => ("inbox.do".to_string(), None),
         },
         Command::Labels { command: sub } => match sub {
             LabelsCommand::List(_) => ("labels.list".to_string(), None),

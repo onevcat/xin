@@ -168,7 +168,36 @@ Fields:
 
 Same as `search.items[]` but without implying threading; still includes `threadId` and `emailId`.
 
-### 4.3 get (single email)
+### 4.3 inbox next
+
+`xin inbox next ...` is a thin wrapper around `messages search`.
+
+It returns the same `data.items[]` shape, plus two conveniences:
+
+- `data.item`: the first item in `data.items` (or `null`).
+- `data.query`: how the query was compiled.
+
+```json
+{
+  "items": [ { "emailId": "M...", "threadId": "T..." } ],
+  "item": { "emailId": "M...", "threadId": "T..." },
+  "query": {
+    "compiled": "in:inbox seen:false subject:foo",
+    "collapseThreads": false,
+    "oldest": false,
+    "all": false
+  }
+}
+```
+
+### 4.4 inbox do
+
+`xin inbox do <emailId> <action> ...` reuses the underlying sugar outputs (`archive`, `trash`, `read`, `unread`).
+
+- Envelope `command` is `inbox.do`.
+- `data` matches the target action’s schema in §6 (organize outputs).
+
+### 4.5 get (single email)
 
 `xin get <emailId> --format metadata|full|raw`
 
@@ -221,7 +250,7 @@ Notes:
   - It is a parsed dictionary keyed by **normalized lowercase** header names.
   - Values are scalars for singleton headers, and arrays for headers that may repeat (e.g. `received`, `dkim-signature`, `authentication-results`, `resent-*`).
 
-### 4.4 thread get
+### 4.6 thread get
 
 `xin thread get <threadId> [--full]`:
 

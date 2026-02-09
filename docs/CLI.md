@@ -304,6 +304,28 @@ Next improvements (planned):
 
 **TBD:** likely provider-specific and may be unavailable on many JMAP servers.
 
+### 1.8 `xin inbox next [--all] [--oldest] [--max <n>] [--page <token>] [<query>]` (v0)
+
+Inbox-zero helper: return the next email to process from Inbox.
+
+- Default compiled query: `in:inbox seen:false` (unread only).
+- `--all`: include read messages.
+- `--oldest`: oldest-first (default newest-first).
+- `<query>`: additional sugar terms appended with AND.
+
+Output is `messages search`-compatible, with a convenience `data.item` for the first result.
+
+### 1.9 `xin inbox do <emailId> <archive|trash|read|unread> [--whole-thread]` (v0)
+
+Inbox-zero helper: apply an action to an email (optionally to its whole thread).
+
+- Maps to existing sugar commands:
+  - `archive` → `xin archive <emailId>`
+  - `trash` → `xin trash <emailId>`
+  - `read` → `xin read <emailId>`
+  - `unread` → `xin unread <emailId>`
+- `--whole-thread`: same semantics/constraints as the sugar commands.
+
 ---
 
 ## 2) Organize

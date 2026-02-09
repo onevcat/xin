@@ -79,6 +79,12 @@ pub enum Command {
         command: BatchCommand,
     },
 
+    /// Inbox-zero helpers.
+    Inbox {
+        #[command(subcommand)]
+        command: InboxCommand,
+    },
+
     /// Labels (mailboxes) operations.
     Labels {
         #[command(subcommand)]
@@ -314,6 +320,58 @@ pub struct TrashArgs {
 pub enum BatchCommand {
     Modify(BatchModifyArgs),
     Delete(BatchDeleteArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum InboxCommand {
+    /// Get the next email to process from Inbox.
+    Next(InboxNextArgs),
+
+    /// Apply an action to an email (and optionally its whole thread).
+    Do(InboxDoArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct InboxNextArgs {
+    /// Include already-seen emails (default: only unread).
+    #[arg(long)]
+    pub all: bool,
+
+    /// Oldest-first (default: newest-first).
+    #[arg(long)]
+    pub oldest: bool,
+
+    /// Max number of items to return (default: 1).
+    #[arg(long = "max")]
+    pub max: Option<usize>,
+
+    /// Additional sugar query appended with AND.
+    #[arg(value_name = "QUERY", allow_hyphen_values = true)]
+    pub query: Option<String>,
+
+    /// Page token (from meta.nextPage).
+    #[arg(long)]
+    pub page: Option<String>,
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InboxAction {
+    Archive,
+    Trash,
+    Read,
+    Unread,
+}
+
+#[derive(Args, Debug)]
+pub struct InboxDoArgs {
+    pub email_id: String,
+
+    #[arg(value_enum)]
+    pub action: InboxAction,
+
+    /// Apply to the whole thread containing the given email.
+    #[arg(long)]
+    pub whole_thread: bool,
 }
 
 #[derive(Args, Debug)]
