@@ -93,7 +93,7 @@ fn lex_tokens(input: &str) -> Result<Vec<Token>, XinErrorOut> {
 
             if inner.contains("or:(") {
                 return Err(XinErrorOut::usage(
-                    "nested or:(...) is not supported in v0".to_string(),
+                    "nested or:(...) is not supported in v0; use `--filter-json` for nested boolean logic".to_string(),
                 ));
             }
 
@@ -132,13 +132,13 @@ fn parse_simple_term(token: &str) -> Result<(bool, Option<String>, String), XinE
     // No parentheses grouping in v0.
     if token.trim_start().starts_with("-(") {
         return Err(XinErrorOut::usage(
-            "group negation `-(...)` is not supported in v0; negate individual terms (e.g. `-from:alice -subject:foo`) or use `--filter-json`".to_string(),
+            "group negation `-(...)` is not supported in v0; negate individual terms (e.g. `-from:alice -subject:foo`) or use `--filter-json` (inline JSON or @file). Example: --filter-json '{\"operator\":\"NOT\",\"conditions\":[{\"from\":\"alice\"}]}'".to_string(),
         ));
     }
 
     if s.starts_with('(') || s.ends_with(')') {
         return Err(XinErrorOut::usage(
-            "parentheses grouping is not supported in v0; use `or:(a|b|...)`, `-term`, or `--filter-json` for complex filters".to_string(),
+            "parentheses grouping is not supported in v0; use `or:(a|b|...)`, `-term`, or `--filter-json` (inline JSON or @file) for complex filters. Example: --filter-json '{\"operator\":\"AND\",\"conditions\":[{\"from\":\"alice\"},{\"subject\":\"foo\"}]}'".to_string(),
         ));
     }
 

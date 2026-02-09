@@ -774,6 +774,7 @@ async fn search_sugar_parentheses_are_rejected_in_v0() {
         .unwrap_or("");
     assert!(msg.contains("parentheses"), "message={msg}");
     assert!(msg.contains("--filter-json"), "message={msg}");
+    assert!(msg.contains("Example"), "message={msg}");
 }
 
 #[tokio::test]
@@ -807,6 +808,7 @@ async fn search_sugar_group_negation_is_rejected_in_v0() {
         .unwrap_or("");
     assert!(msg.contains("group negation"), "message={msg}");
     assert!(msg.contains("--filter-json"), "message={msg}");
+    assert!(msg.contains("Example"), "message={msg}");
 }
 
 #[tokio::test]

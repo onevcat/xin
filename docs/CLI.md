@@ -181,6 +181,12 @@ Parsing/precedence rules (v0 implementation constraints):
 
 If you need full boolean expressions, use `--filter-json`.
 
+Examples:
+- Inline JSON:
+  - `--filter-json '{"operator":"NOT","conditions":[{"inMailbox":"<mbx>"}]}'`
+- File:
+  - `--filter-json @filter.json`
+
 #### Compilation (examples)
 
 Simple AND (often merged into one FilterCondition):
