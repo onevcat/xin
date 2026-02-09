@@ -117,6 +117,7 @@ pub enum Command {
 
 #[derive(Args, Debug)]
 pub struct SearchArgs {
+    #[arg(value_name = "QUERY", allow_hyphen_values = true)]
     pub query: Option<String>,
 
     #[arg(long = "max")]
@@ -150,6 +151,7 @@ pub enum MessagesCommand {
 
 #[derive(Args, Debug)]
 pub struct MessagesSearchArgs {
+    #[arg(value_name = "QUERY", allow_hyphen_values = true)]
     pub query: Option<String>,
 
     #[arg(long = "max")]
