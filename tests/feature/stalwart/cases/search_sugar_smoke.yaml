@@ -1,0 +1,142 @@
+id: read_search_sugar_smoke
+it: search sugar DSL works end-to-end (Stalwart)
+requiresFresh: true
+
+env:
+  # The Stalwart harness exposes the JMAP discovery endpoint at /.-well-known/jmap.
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+    - user: carol
+      pass: carol-pass
+  smtpInject:
+    # Unread, no attachment, subject contains spaces (quote test).
+    - authUser: bob
+      authPass: bob-pass
+      mailFrom: bob@example.org
+      rcptTo: [alice@example.org]
+      emlFile: tests/feature/stalwart/fixtures/simple_subject_space.eml
+
+    # Unread, no attachment, different sender (OR group test).
+    - authUser: carol
+      authPass: carol-pass
+      mailFrom: carol@example.org
+      rcptTo: [alice@example.org]
+      emlFile: tests/feature/stalwart/fixtures/simple_from_carol.eml
+
+    # Unread, has attachment.
+    - authUser: bob
+      authPass: bob-pass
+      mailFrom: bob@example.org
+      rcptTo: [alice@example.org]
+      emlFile: tests/feature/stalwart/fixtures/existing_big_attachment.eml
+
+steps:
+  - name: search from + seen:false (AND)
+    say:
+      - Sugar query should compile to a JMAP filter and return unread messages.
+    xin:
+      args:
+        - search
+        - "from:bob seen:false"
+        - --max
+        - "10"
+    expect:
+      - label: has first item
+        path: /data/items/0/emailId
+        exists: true
+      - label: from contains bob@example.org
+        path: /data/items/0/from/0/email
+        contains: "bob@example.org"
+      - label: derived unread=true
+        path: /data/items/0/unread
+        equals: true
+
+  - name: search subject with spaces (quoted)
+    xin:
+      args:
+        - search
+        - 'subject:"Hello World Meeting"'
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/subject
+        equals: "Hello World Meeting"
+      - path: /data/items/0/hasAttachment
+        equals: false
+
+  - name: search attachment message by subject (stalwart)
+    say:
+      - "Stalwart currently returns empty results for Email/query hasAttachment=true filters."
+      - "We still validate that attachment metadata is surfaced once we locate the message by subject."
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - search
+        - subject:big
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/subject
+        contains: "big attachment"
+      - path: /data/items/0/hasAttachment
+        equals: true
+
+  - name: search -in:trash (hyphenated query value)
+    say:
+      - Ensure clap accepts QUERY values starting with '-'.
+    xin:
+      args:
+        - search
+        - -in:trash
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
+
+  - name: search before:2000-01-01 returns empty
+    xin:
+      args:
+        - search
+        - before:2000-01-01
+        - --max
+        - "10"
+    expect:
+      - path: /data/items
+        equals: []
+
+  - name: search after:2100-01-01 returns empty
+    xin:
+      args:
+        - search
+        - after:2100-01-01
+        - --max
+        - "10"
+    expect:
+      - path: /data/items
+        equals: []
+
+  - name: search OR group
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - search
+        - "or:(from:bob|from:carol) seen:false"
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
