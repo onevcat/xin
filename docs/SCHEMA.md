@@ -286,7 +286,10 @@ For Mailbox/set-based commands, xin returns a summary of what the server reporte
 ```
 
 Notes:
-- This is a normalized view of `Mailbox/set` results; xin may also include `raw` method responses when `--verbose` is set (TBD).
+- `labels create`: returns `created[]` with at least `{id,name}`.
+- `labels rename` / `labels modify`: return `updated[]` with `{id}`.
+- `labels delete`: returns `destroyed[]` with ids.
+- Mailbox fields like counts or `isSubscribed` may be `null` if the server does not provide them (xin keeps the shape stable).
 
 ---
 

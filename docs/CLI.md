@@ -445,14 +445,14 @@ Naming / aliasing (fixed):
 - If `--remove-emails` is set, xin sets `onDestroyRemoveEmails=true` (RFC 8621 `Mailbox/set`).
 - If `--remove-emails` is not set, xin uses the RFC default (`false`).
 
-### 3.6 `xin labels modify <mailboxId> [--name <str>] [--parent <mailboxId|null>] [--sort-order <int>] [--subscribe true|false]` (v0)
+### 3.6 `xin labels modify <mailboxId> [--name <str>] [--parent <mailboxId>] [--sort-order <int>] [--subscribe true|false]` (v0)
 **JSON schema:** SCHEMA.md §5.3
 
 Gmail’s “modify labels on threads” does not map to JMAP.
 
 In xin, `labels modify` changes **mailbox properties** via `Mailbox/set` update:
 - `--name`: maps to `Mailbox.name`
-- `--parent`: maps to `Mailbox.parentId` (use literal `null` to move to top-level)
+- `--parent`: maps to `Mailbox.parentId`
 - `--sort-order`: maps to `Mailbox.sortOrder`
 - `--subscribe`: maps to `Mailbox.isSubscribed`
 

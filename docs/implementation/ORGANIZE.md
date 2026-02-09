@@ -73,13 +73,17 @@ Example: remove inbox membership (archive-style):
       "accountId": "A",
       "update": {
         "M123": {
-          "mailboxIds/<inboxMailboxId>": null
+          "mailboxIds/<inboxMailboxId>": false
         }
       }
     }, "s1"]
   ]
 }
 ```
+
+Notes:
+- RFC 8620 patch examples often use `null` for removal.
+- The current Rust client (`jmap-client`) encodes removals as `false` for `mailboxIds/<id>` and `keywords/<kw>` patch keys; xin follows that encoding.
 
 Example: trash (set mailboxIds to only trash mailbox):
 
@@ -114,20 +118,21 @@ Example: `xin thread read T123`:
 {
   "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],
   "methodCalls": [
-    ["Thread/get", {"accountId":"A", "ids":["T123"]}, "t1"],
+    ["Thread/get", {"accountId":"A", "ids":["T123"], "properties":["emailIds"]}, "t1"],
     ["Email/set", {
       "accountId": "A",
       "update": {
-        "#t1/list/0/emailIds/*": { "keywords/$seen": true }
+        "M1": { "keywords/$seen": true },
+        "M2": { "keywords/$seen": true }
       }
     }, "s1"]
   ]
 }
 ```
 
-Note:
-- The above uses a conceptual "apply to each" notation; actual JMAP requires an `update` object keyed by explicit ids.
-- Implementation should build the `update` map client-side from the returned `emailIds`.
+Notes:
+- xin expands `Thread/get` to explicit `emailIds` first, then constructs the `Email/set.update` map client-side.
+- This is RFC-compliant and avoids relying on result-reference update syntaxes.
 
 ---
 

@@ -12,9 +12,14 @@ References:
 ## 1) List / get
 
 - List: `Mailbox/get` with `ids: null`
-- Get: `Mailbox/get` with `ids: [<id>]`
+- Get (v0): xin currently performs **list+resolve**:
+  1) `Mailbox/get` with `ids: null`
+  2) resolve `<mailboxId|name|role>` to a concrete id (see `docs/CLI.md`)
+  3) return the matching mailbox object
 
-Role/name resolution is defined in `docs/CLI.md`.
+Notes:
+- This keeps implementation simple and ensures `labels get` can resolve by name/role.
+- A future optimization could call `Mailbox/get` with `ids: [<id>]` once the id is known.
 
 ---
 
