@@ -98,11 +98,15 @@ Sorting (fixed for v0):
 Paging token (fixed for v0):
 - JMAP paging is based on `position/anchor/limit` semantics.
 - xin defines `--page TOKEN` as an opaque cursor (base64url-encoded JSON) containing the minimal state needed to continue.
-- Cursor contents (fixed):
+- Cursor contents (v0 implemented):
   - `position` (int), `limit` (int)
   - `collapseThreads` (bool)
-  - `sort` (array of JMAP comparators)
-  - `filter` (the compiled JMAP filter JSON, or a stable hash + a separate `filterRef`)
+  - `isAscending` (bool) (from `--oldest`)
+  - `filter` (the compiled JMAP filter JSON)
+
+Planned improvements:
+- Include explicit sort comparators in the token (v0 currently fixed to `receivedAt`).
+- Consider emitting a stable filter hash in the token to keep tokens smaller.
 
 Rule:
 - If the user changes filter/sort/collapseThreads while supplying `--page`, xin MUST error instead of producing surprising results.
@@ -239,7 +243,16 @@ Notes:
 
 JSON output fields (proposal):
 - `items[]`: `{ threadId, latestEmailId, subject, from, to, date, snippet, unread, hasAttachment, mailboxIds, keywords }`
-- `nextPageToken`
+- `nextPage` (in `meta.nextPage`): string|null (opaque cursor for `--page`)
+
+Paging note (v0):
+- Some servers omit `total` in `Email/query`. xin still emits `nextPage` when the result count hits `--max`.
+- If results are fewer than `--max`, xin assumes there is no next page.
+
+Next improvements (planned):
+- Add more sort keys.
+- Make the page token include explicit sort comparators (instead of the current fixed v0 behavior).
+- Consider emitting a stable filter hash in the token to keep tokens smaller.
 
 **TBD:** precise pagination semantics depend on JMAP `Email/query` (`position`, `anchor`, `limit`).
 
@@ -463,23 +476,25 @@ Per the RFC-first principle, xin will send standard requests and surface any ser
 
 **JMAP:** `Identity/get`
 
-### 4.1 `xin send --to <email> --subject <str> --text <str|@file>` (v0)
+### 4.1 `xin send --to ... --subject ... [--text <str|@file>] [--body-html <str|@file>] [--cc ...] [--bcc ...] [--attach <path>]... [--identity <id|email>]` (v0)
 **gog analog:** `gog gmail send ...`
 **JSON schema:** SCHEMA.md §7.2
 
 Body input:
 - `--text` accepts a literal string or `@/path/to/file.txt` to read from file.
+- `--body-html` accepts a literal string or `@/path/to/file.html`.
+- At least one of `--text`, `--body-html`, `--attach` must be provided.
 
 Behavior (v0):
-- Creates a `text/plain` draft via `Email/set` in the Drafts mailbox.
-  - **Implementation note (temporary):** for compatibility, xin currently sets `textBody + bodyValues` and **does not** set `bodyStructure`.
-    - Rationale: Stalwart rejects `Email/set` create when both `textBody` and `bodyStructure` are set.
-    - This is a **smoke-test enabler**, not a “final” sending implementation.
-- Uses the first available Identity from `Identity/get` as the From identity.
+- Resolves the Drafts mailbox id (role=`drafts`).
+- Resolves the sending Identity:
+  - if `--identity` is provided, matches by Identity id or email.
+  - otherwise uses the first Identity returned by `Identity/get`.
+- Uploads each `--attach` via `uploadUrl` (RFC 8620 §6.1) to obtain `blobId`.
+- Creates a draft via `Email/set` with a deterministic `bodyStructure`:
+  - text+html → `multipart/alternative`
+  - attachments → wrap in top-level `multipart/mixed` and append attachment parts (`blobId` + `name`).
 - Submits via `EmailSubmission/set`.
-
-Not implemented yet (TBD):
-- HTML bodies, attachments, reply/threading flags, explicit identity selection.
 
 ### Error surfacing
 
@@ -502,9 +517,14 @@ Drafts are emails in the Drafts mailbox.
 - MUST include membership of the Drafts mailbox.
 - Body/attachments follow the exact same rules as `xin send` (uploadUrl + blobId; deterministic MIME layout).
 
-#### `xin drafts update <draftEmailId> [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--body ...|--body-file ...|--body-html ...] [--attach ...]` (TBD)
-- RFC allows updating an Email via `Email/set`, but patching bodyStructure is non-trivial.
-- v0 suggestion: allow updating headers/keywords/mailboxIds; leave body edits as TBD.
+#### `xin drafts update <draftEmailId> [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--body ...|--body-file ...] [--body-html ...] [--attach ...] [--replace-attachments] [--clear-attachments] [--identity <id|email>]` (v0)
+- Updates the existing draft via `Email/set` `update`.
+- Only fields provided on the CLI are updated; unspecified fields remain unchanged.
+- If any of body/attachments are modified, xin may fetch the existing draft (`Email/get`) to preserve unspecified body parts/attachments.
+- Attachment behavior:
+  - `--attach <path>` appends attachments by default.
+  - `--replace-attachments` replaces existing attachments (requires at least one `--attach`).
+  - `--clear-attachments` removes all attachments (cannot be combined with `--attach`).
 
 #### `xin drafts delete <draftEmailId>...` (v0)
 - Removes the Email from the Drafts mailbox (and MAY destroy if no remaining mailboxes, server-defined).

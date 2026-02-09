@@ -316,10 +316,18 @@ For thread-level operations (`xin thread ...`), include:
 
 ## 7) Write outputs
 
-### 7.1 identities list
+### 7.1 identities
+
+- `identities list`:
 
 ```json
 { "identities": [ { "id": "I...", "name": "...", "email": "me@example.com" } ] }
+```
+
+- `identities get`:
+
+```json
+{ "identity": { "id": "I...", "name": "...", "email": "me@example.com" } }
 ```
 
 ### 7.2 send
@@ -358,6 +366,18 @@ All `xin drafts ...` commands use the same envelope; their `data` shapes are:
 
 ```json
 { "draft": { "emailId": "M...", "threadId": "T..." }, "submission": { "id": "S...", "sendAt": null } }
+```
+
+- `drafts update`:
+
+```json
+{ "draft": { "emailId": "M...", "threadId": "T..." }, "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ] }
+```
+
+- `drafts delete`:
+
+```json
+{ "deleted": ["M..."] }
 ```
 
 ---
