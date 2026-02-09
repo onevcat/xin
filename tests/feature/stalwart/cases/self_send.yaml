@@ -26,7 +26,7 @@ steps:
         - --to
         - alice@example.org
         - --subject
-        - "[xin-case:${caseId}:${runId}] hello"
+        - "[xin-case:${caseId}:${runId}] selfsend hello"
         - --text
         - "hello from xin"
     save:
@@ -43,11 +43,12 @@ steps:
       args:
         - messages
         - search
+        - subject:selfsend
         - --max
         - "5"
     expect:
       - path: /data/items/0/subject
-        contains: "[xin-case:${caseId}:${runId}]"
+        contains: "${runId}"
       - path: /data/items/0/emailId
         exists: true
     save:

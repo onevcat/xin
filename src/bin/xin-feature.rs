@@ -506,9 +506,10 @@ fn run_step_once(
 }
 
 fn assert_one(v: &serde_json::Value, a: &Assertion, ctx: &Context) -> Result<(), String> {
+    let path = substitute(&a.path, ctx)?;
     let got = v
-        .pointer(&a.path)
-        .ok_or_else(|| format!("missing pointer {}", a.path))?;
+        .pointer(&path)
+        .ok_or_else(|| format!("missing pointer {}", path))?;
 
     if a.exists.unwrap_or(false) {
         if got.is_null() {

@@ -1,0 +1,189 @@
+id: send_supported_matrix
+it: "send command smoke: identity by id, @file bodies, attachments-only, multiple attachments, octet-stream"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: identities-list
+    say:
+      - "Given alice can list identities"
+    xin:
+      args:
+        - identities
+        - list
+    expect:
+      - path: /data/identities/0/id
+        exists: true
+      - path: /data/identities/0/email
+        equals: alice@example.org
+    save:
+      identityId: /data/identities/0/id
+
+  - name: send-identity-by-id
+    say:
+      - "When alice sends using --identity <id>"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] identity-by-id"
+        - --text
+        - "hello"
+        - --identity
+        - ${identityId}
+    save:
+      emailId_id: /data/draft/emailId
+
+  - name: get-full-identity-by-id
+    xin:
+      args:
+        - get
+        - ${emailId_id}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${emailId_id}
+      - path: /data/body/text
+        equals: "hello"
+
+  - name: send-text-from-file
+    say:
+      - "When alice sends using --text @file"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] text-from-file"
+        - --text
+        - "@tests/feature/stalwart/fixtures/send_body.txt"
+    save:
+      emailId_textfile: /data/draft/emailId
+
+  - name: get-full-text-from-file
+    xin:
+      args:
+        - get
+        - ${emailId_textfile}
+        - --format
+        - full
+    expect:
+      - path: /data/body/text
+        equals: "hello from file body\nline2\n"
+
+  - name: send-html-from-file
+    say:
+      - "When alice sends using --body-html @file"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] html-from-file"
+        - --body-html
+        - "@tests/feature/stalwart/fixtures/send_body.html"
+    save:
+      emailId_htmlfile: /data/draft/emailId
+
+  - name: get-full-html-from-file
+    xin:
+      args:
+        - get
+        - ${emailId_htmlfile}
+        - --format
+        - full
+    expect:
+      - path: /data/body/html
+        contains: "<b>file</b>"
+
+  - name: send-attachments-only-octet-stream
+    say:
+      - "When alice sends attachments-only (no text/html)"
+      - "Then xin should upload as application/octet-stream for unknown extensions"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] attachments-only"
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.bin
+    expect:
+      - path: /data/uploaded/0/type
+        equals: application/octet-stream
+    save:
+      emailId_attonly: /data/draft/emailId
+
+  - name: get-full-attachments-only
+    retry:
+      attempts: 20
+      sleepMs: 300
+    xin:
+      args:
+        - get
+        - ${emailId_attonly}
+        - --format
+        - full
+    expect:
+      - path: /data/email/hasAttachment
+        equals: true
+      - path: /data/attachments/0/name
+        equals: tiny.bin
+
+  - name: send-multiple-attachments
+    say:
+      - "When alice sends with multiple attachments"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] multi-attachments"
+        - --text
+        - "see attachments"
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.pdf
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.bin
+    expect:
+      - path: /data/uploaded/0/blobId
+        exists: true
+      - path: /data/uploaded/1/blobId
+        exists: true
+    save:
+      emailId_multiatt: /data/draft/emailId
+
+  - name: get-full-multiple-attachments
+    retry:
+      attempts: 20
+      sleepMs: 300
+    xin:
+      args:
+        - get
+        - ${emailId_multiatt}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments/0/name
+        equals: tiny.pdf
+      - path: /data/attachments/1/name
+        equals: tiny.bin

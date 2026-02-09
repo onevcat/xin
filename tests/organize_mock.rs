@@ -1,10 +1,7 @@
 use assert_cmd::Command;
 use serde_json::json;
-use wiremock::matchers::{body_string_contains, header, method, path};
+use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-use tempfile::NamedTempFile;
-use std::io::Write;
 
 fn mock_session(server: &MockServer) -> serde_json::Value {
     json!({
@@ -48,8 +45,22 @@ fn mock_session(server: &MockServer) -> serde_json::Value {
     })
 }
 
+fn find_single_method_args(body: &serde_json::Value, method_name: &str) -> Option<serde_json::Value> {
+    let calls = body.get("methodCalls")?.as_array()?;
+    for c in calls {
+        let arr = c.as_array()?;
+        if arr.len() < 2 {
+            continue;
+        }
+        if arr[0].as_str()? == method_name {
+            return Some(arr[1].clone());
+        }
+    }
+    None
+}
+
 #[tokio::test]
-async fn send_text_works_against_mock_jmap() {
+async fn batch_modify_emits_patch_keys_for_mailbox_and_keyword() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -65,9 +76,9 @@ async fn send_text_works_against_mock_jmap() {
                 "accountId": "A",
                 "state": "s",
                 "list": [{
-                    "id": "mb1",
-                    "name": "Drafts",
-                    "role": "drafts"
+                    "id": "mb_inbox",
+                    "name": "Inbox",
+                    "role": "inbox"
                 }],
                 "notFound": []
             }, "m0"]
@@ -81,29 +92,6 @@ async fn send_text_works_against_mock_jmap() {
         .mount(&server)
         .await;
 
-    let identity_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["Identity/get", {
-                "accountId": "A",
-                "state": "s",
-                "list": [{
-                    "id": "i1",
-                    "name": "Me",
-                    "email": "me@example.com"
-                }],
-                "notFound": []
-            }, "i0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("Identity/get"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(identity_response))
-        .mount(&server)
-        .await;
-
     let email_set_response = json!({
         "sessionState": "s",
         "methodResponses": [
@@ -111,9 +99,7 @@ async fn send_text_works_against_mock_jmap() {
                 "accountId": "A",
                 "oldState": "s",
                 "newState": "s",
-                "created": {
-                    "c0": { "id": "m1", "threadId": "t1" }
-                }
+                "updated": {"m1": {}}
             }, "e0"]
         ]
     });
@@ -125,38 +111,17 @@ async fn send_text_works_against_mock_jmap() {
         .mount(&server)
         .await;
 
-    let submission_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["EmailSubmission/set", {
-                "accountId": "A",
-                "oldState": "s",
-                "newState": "s",
-                "created": {
-                    "c0": { "id": "s1", "emailId": "m1" }
-                }
-            }, "s0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("EmailSubmission/set"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(submission_response))
-        .mount(&server)
-        .await;
-
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
         .args([
-            "send",
-            "--to",
-            "to@example.com",
-            "--subject",
-            "Hi",
-            "--text",
-            "Hello",
+            "batch",
+            "modify",
+            "m1",
+            "--add",
+            "inbox",
+            "--add",
+            "$flagged",
         ])
         .output()
         .expect("run");
@@ -172,23 +137,41 @@ async fn send_text_works_against_mock_jmap() {
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(
-        v.get("data")
-            .and_then(|d| d.get("draft"))
-            .and_then(|e| e.get("emailId"))
-            .and_then(|x| x.as_str()),
-        Some("m1")
+        v.get("command").and_then(|v| v.as_str()),
+        Some("batch.modify")
     );
-    assert_eq!(
-        v.get("data")
-            .and_then(|d| d.get("submission"))
-            .and_then(|s| s.get("id"))
-            .and_then(|x| x.as_str()),
-        Some("s1")
+
+    let requests = server.received_requests().await.expect("requests");
+    let email_set = requests
+        .iter()
+        .find(|r| String::from_utf8_lossy(&r.body).contains("Email/set"))
+        .expect("Email/set request");
+
+    let body: serde_json::Value = serde_json::from_slice(&email_set.body).expect("email/set json");
+    let args = find_single_method_args(&body, "Email/set").expect("Email/set args");
+    let update = args
+        .get("update")
+        .and_then(|v| v.as_object())
+        .expect("update object");
+
+    let u = update.get("m1").and_then(|v| v.as_object()).expect("m1 patch");
+
+    // For non-replace mailbox updates, we expect patch keys like "mailboxIds/<id>" and
+    // "keywords/<kw>".
+    assert!(
+        u.keys().any(|k| k == "mailboxIds/mb_inbox"),
+        "expected mailboxIds/mb_inbox patch key, got keys: {:?}",
+        u.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        u.keys().any(|k| k == "keywords/$flagged"),
+        "expected keywords/$flagged patch key, got keys: {:?}",
+        u.keys().collect::<Vec<_>>()
     );
 }
 
 #[tokio::test]
-async fn send_html_and_attachment_uploads_and_sets_body_structure() {
+async fn trash_whole_thread_uses_mailbox_ids_replacement_object() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -204,9 +187,13 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
                 "accountId": "A",
                 "state": "s",
                 "list": [{
-                    "id": "mb1",
-                    "name": "Drafts",
-                    "role": "drafts"
+                    "id": "mb_trash",
+                    "name": "Trash",
+                    "role": "trash"
+                }, {
+                    "id": "mb_inbox",
+                    "name": "Inbox",
+                    "role": "inbox"
                 }],
                 "notFound": []
             }, "m0"]
@@ -220,45 +207,41 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
         .mount(&server)
         .await;
 
-    let identity_response = json!({
+    let email_get_response = json!({
         "sessionState": "s",
         "methodResponses": [
-            ["Identity/get", {
+            ["Email/get", {
                 "accountId": "A",
                 "state": "s",
-                "list": [{
-                    "id": "i1",
-                    "name": "Me",
-                    "email": "me@example.com"
-                }, {
-                    "id": "i2",
-                    "name": "Other",
-                    "email": "other@example.com"
-                }],
+                "list": [{"id": "m1", "threadId": "t1"}],
                 "notFound": []
-            }, "i0"]
+            }, "g0"]
         ]
     });
 
     Mock::given(method("POST"))
         .and(path("/jmap"))
-        .and(body_string_contains("Identity/get"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(identity_response))
+        .and(body_string_contains("Email/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(email_get_response))
         .mount(&server)
         .await;
 
-    Mock::given(method("POST"))
-        .and(path("/upload/A"))
-        .and(header("content-type", "application/pdf"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({
+    let thread_get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Thread/get", {
                 "accountId": "A",
-                "blobId": "b1",
-                "type": "application/pdf",
-                "size": 3
-            })),
-        )
-        .expect(1)
+                "state": "s",
+                "list": [{"id": "t1", "emailIds": ["m1", "m2"]}],
+                "notFound": []
+            }, "t0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Thread/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(thread_get_response))
         .mount(&server)
         .await;
 
@@ -269,9 +252,7 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
                 "accountId": "A",
                 "oldState": "s",
                 "newState": "s",
-                "created": {
-                    "c0": { "id": "m1", "threadId": "t1" }
-                }
+                "updated": {"m1": {}, "m2": {}}
             }, "e0"]
         ]
     });
@@ -279,63 +260,14 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
     Mock::given(method("POST"))
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
-        .and(body_string_contains("multipart/mixed"))
-        .and(body_string_contains("multipart/alternative"))
-        .and(body_string_contains("\"blobId\":\"b1\""))
-        .and(body_string_contains("other@example.com"))
         .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
-        .expect(1)
         .mount(&server)
         .await;
-
-    let submission_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["EmailSubmission/set", {
-                "accountId": "A",
-                "oldState": "s",
-                "newState": "s",
-                "created": {
-                    "c0": { "id": "s1", "emailId": "m1" }
-                }
-            }, "s0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("EmailSubmission/set"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(submission_response))
-        .mount(&server)
-        .await;
-
-    let mut f = NamedTempFile::new().expect("tmp");
-    f.write_all(b"PDF").expect("write");
-    let p = f.path().with_extension("pdf");
-    std::fs::rename(f.path(), &p).expect("rename");
 
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args([
-            "send",
-            "--to",
-            "to@example.com",
-            "--cc",
-            "cc@example.com",
-            "--bcc",
-            "bcc@example.com",
-            "--subject",
-            "Hi",
-            "--text",
-            "Hello",
-            "--body-html",
-            "<b>Hello</b>",
-            "--attach",
-            p.to_str().unwrap(),
-            "--identity",
-            "other@example.com",
-        ])
+        .args(["trash", "--whole-thread", "m1"])
         .output()
         .expect("run");
 
@@ -349,11 +281,44 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(
-        v.get("data")
-            .and_then(|d| d.get("uploaded"))
-            .and_then(|u| u.as_array())
-            .map(|a| a.len()),
-        Some(1)
-    );
+    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("trash"));
+
+    let requests = server.received_requests().await.expect("requests");
+    let email_set = requests
+        .iter()
+        .find(|r| String::from_utf8_lossy(&r.body).contains("Email/set"))
+        .expect("Email/set request");
+
+    let body: serde_json::Value = serde_json::from_slice(&email_set.body).expect("email/set json");
+    let args = find_single_method_args(&body, "Email/set").expect("Email/set args");
+    let update = args
+        .get("update")
+        .and_then(|v| v.as_object())
+        .expect("update object");
+
+    for id in ["m1", "m2"] {
+        let u = update
+            .get(id)
+            .and_then(|v| v.as_object())
+            .unwrap_or_else(|| panic!("missing patch for {id}"));
+
+        assert!(
+            u.contains_key("mailboxIds"),
+            "expected mailboxIds replacement object for {id}, got keys: {:?}",
+            u.keys().collect::<Vec<_>>()
+        );
+
+        // And it should not use patch keys mailboxIds/<id> when doing replacement.
+        assert!(
+            !u.keys().any(|k| k.starts_with("mailboxIds/")),
+            "expected no mailboxIds/<id> patch keys for {id}, got keys: {:?}",
+            u.keys().collect::<Vec<_>>()
+        );
+
+        let mbs = u
+            .get("mailboxIds")
+            .and_then(|v| v.as_object())
+            .expect("mailboxIds object");
+        assert_eq!(mbs.get("mb_trash").and_then(|v| v.as_bool()), Some(true));
+    }
 }

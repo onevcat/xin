@@ -1,0 +1,172 @@
+id: send_smoke
+it: "send command smoke: text/html/attachments/cc+bcc/identity + basic usage error"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: send-text-only-cc-bcc
+    say:
+      - "When alice sends a text-only message with cc/bcc"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --cc
+        - bob@example.org
+        - --bcc
+        - bob@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] text-only"
+        - --text
+        - "hello text"
+        - --identity
+        - alice@example.org
+    save:
+      emailId_text: /data/draft/emailId
+
+  - name: get-full-text-only
+    xin:
+      args:
+        - get
+        - ${emailId_text}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${emailId_text}
+      - path: /data/body/text
+        equals: "hello text"
+      - path: /data/email/cc/0/email
+        equals: bob@example.org
+      - path: /data/email/bcc/0/email
+        equals: bob@example.org
+
+  - name: send-html-only
+    say:
+      - "When alice sends an html-only message"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] html-only"
+        - --body-html
+        - "<b>Hello</b>"
+    save:
+      emailId_html: /data/draft/emailId
+
+  - name: get-full-html-only
+    xin:
+      args:
+        - get
+        - ${emailId_html}
+        - --format
+        - full
+    expect:
+      - path: /data/email/emailId
+        equals: ${emailId_html}
+      - path: /data/body/html
+        contains: "<b>Hello</b>"
+
+  - name: send-text-and-html
+    say:
+      - "When alice sends a multipart/alternative (text+html) message"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] text+html"
+        - --text
+        - "Hello text"
+        - --body-html
+        - "<i>Hello html</i>"
+    save:
+      emailId_both: /data/draft/emailId
+
+  - name: get-full-text-and-html
+    xin:
+      args:
+        - get
+        - ${emailId_both}
+        - --format
+        - full
+    expect:
+      - path: /data/body/text
+        equals: "Hello text"
+      - path: /data/body/html
+        contains: "<i>Hello html</i>"
+
+  - name: send-with-attachment
+    say:
+      - "When alice sends a message with an attachment"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] attachment"
+        - --text
+        - "see attachment"
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.pdf
+    expect:
+      - path: /data/uploaded/0/blobId
+        exists: true
+      - path: /data/uploaded/0/type
+        equals: application/pdf
+      - path: /data/uploaded/0/size
+        exists: true
+    save:
+      emailId_att: /data/draft/emailId
+
+  - name: get-full-with-attachment
+    retry:
+      attempts: 20
+      sleepMs: 300
+    xin:
+      args:
+        - get
+        - ${emailId_att}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments/0/name
+        equals: tiny.pdf
+      - path: /data/attachments/0/type
+        equals: application/pdf
+      - path: /data/email/hasAttachment
+        equals: true
+
+  - name: send-missing-body-is-usage-error
+    say:
+      - "Then send without body or attachments should be a usage error"
+    expectOk: false
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] missing"
+    expect:
+      - path: /error/kind
+        equals: xinUsageError
+      - path: /error/message
+        contains: "missing message content"

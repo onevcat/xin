@@ -1,0 +1,128 @@
+id: organize_smoke
+it: "batch/thread organize commands work against Stalwart (modify + whole-thread trash)"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: send-to-self
+    say:
+      - "Given alice is authenticated"
+      - "When alice sends a message to herself"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] organize smoke"
+        - --text
+        - "hello from xin"
+
+  - name: wait-visible-in-search
+    say:
+      - "Then the message should become searchable"
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:organize
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: ${runId}
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId: /data/items/0/emailId
+      threadId: /data/items/0/threadId
+
+  - name: batch-modify-add-seen-and-flagged
+    say:
+      - "And batch modify can add keywords"
+    xin:
+      args:
+        - batch
+        - modify
+        - ${emailId}
+        - --add
+        - $seen
+        - --add
+        - $flagged
+    expect:
+      - path: /data/appliedTo/emailIds/0
+        equals: ${emailId}
+
+  - name: get-after-batch-modify
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /data/email/keywords/$seen
+        equals: true
+      - path: /data/email/keywords/$flagged
+        equals: true
+
+  - name: thread-modify-add-custom-keyword
+    say:
+      - "And thread modify can add a custom keyword"
+    xin:
+      args:
+        - thread
+        - modify
+        - ${threadId}
+        - --add
+        - foo
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId}
+
+  - name: get-after-thread-modify
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /data/email/keywords/foo
+        equals: true
+
+  - name: trash-whole-thread
+    say:
+      - "And trash --whole-thread performs strict mailbox replacement"
+    xin:
+      args:
+        - trash
+        - --whole-thread
+        - ${emailId}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId}
+      - path: /data/changes/mailboxIds/added/0
+        exists: true
+    save:
+      trashMailboxId: /data/changes/mailboxIds/added/0
+
+  - name: get-after-trash
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /data/email/mailboxIds/${trashMailboxId}
+        equals: true

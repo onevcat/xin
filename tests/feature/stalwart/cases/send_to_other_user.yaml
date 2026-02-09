@@ -27,7 +27,7 @@ steps:
         - --to
         - bob@example.org
         - --subject
-        - "[xin-case:${caseId}:${runId}] hi bob"
+        - "[xin-case:${caseId}:${runId}] sendtobob ${runId}"
         - --text
         - "hello bob from alice"
 
@@ -44,6 +44,7 @@ steps:
       args:
         - messages
         - search
+        - subject:${runId}
         - --max
         - "10"
     expect:
