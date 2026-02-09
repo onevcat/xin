@@ -149,12 +149,43 @@ pub async fn get(
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
+    let needle = args.mailbox.trim();
+
+    // If the input looks like an id (base64url-ish) and is not a known role alias,
+    // try a direct Mailbox/get ids:[id] first.
+    let needle_lower = needle.to_lowercase();
+    let is_role_alias = matches!(
+        needle_lower.as_str(),
+        "inbox" | "trash" | "junk" | "spam" | "sent" | "drafts" | "archive" | "important" | "bin"
+    );
+    let looks_like_id = !needle.is_empty()
+        && needle
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+
+    if looks_like_id && !is_role_alias {
+        match backend.get_mailbox(needle).await {
+            Ok(Some(m)) => {
+                return Envelope::ok(
+                    command_name,
+                    account,
+                    json!({"mailbox": mailbox_to_json(&m)}),
+                    Meta::default(),
+                );
+            }
+            Ok(None) => {
+                // fall back to list+resolve
+            }
+            Err(e) => return Envelope::err(command_name, account, e),
+        }
+    }
+
     let mailboxes = match backend.list_mailboxes().await {
         Ok(m) => m,
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let id = match resolve_mailbox_id(&args.mailbox, &mailboxes) {
+    let id = match resolve_mailbox_id(needle, &mailboxes) {
         Some(id) => id,
         None => {
             return Envelope::err(

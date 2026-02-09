@@ -349,10 +349,8 @@ impl Backend {
         })
     }
 
-    pub async fn list_mailboxes(&self) -> Result<Vec<jmap_client::mailbox::Mailbox>, XinErrorOut> {
-        let mut request = self.j.client().build();
-        let get_request = request.get_mailbox();
-        get_request.properties([
+    fn mailbox_properties() -> [mailbox::Property; 10] {
+        [
             mailbox::Property::Id,
             mailbox::Property::Name,
             mailbox::Property::Role,
@@ -363,11 +361,37 @@ impl Backend {
             mailbox::Property::TotalThreads,
             mailbox::Property::UnreadThreads,
             mailbox::Property::IsSubscribed,
-        ]);
+        ]
+    }
+
+    pub async fn list_mailboxes(&self) -> Result<Vec<jmap_client::mailbox::Mailbox>, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let get_request = request.get_mailbox();
+        get_request.properties(Self::mailbox_properties());
         request
             .send_single::<jmap_client::core::response::MailboxGetResponse>()
             .await
             .map(|mut r| r.take_list())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Mailbox/get failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn get_mailbox(
+        &self,
+        mailbox_id: &str,
+    ) -> Result<Option<jmap_client::mailbox::Mailbox>, XinErrorOut> {
+        let mut request = self.j.client().build();
+        let get_request = request.get_mailbox();
+        get_request.ids([mailbox_id]);
+        get_request.properties(Self::mailbox_properties());
+        request
+            .send_single::<jmap_client::core::response::MailboxGetResponse>()
+            .await
+            .map(|mut r| r.take_list().pop())
             .map_err(|e| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
                 message: format!("Mailbox/get failed: {e}"),

@@ -12,14 +12,15 @@ References:
 ## 1) List / get
 
 - List: `Mailbox/get` with `ids: null`
-- Get (v0): xin currently performs **list+resolve**:
-  1) `Mailbox/get` with `ids: null`
-  2) resolve `<mailboxId|name|role>` to a concrete id (see `docs/CLI.md`)
-  3) return the matching mailbox object
+- Get (v0):
+  - If the input looks like a mailbox id (base64url-ish), xin MAY try `Mailbox/get` with `ids: [<id>]` first.
+  - Otherwise xin performs **list+resolve**:
+    1) `Mailbox/get` with `ids: null`
+    2) resolve `<mailboxId|name|role>` to a concrete id (see `docs/CLI.md`)
+    3) return the matching mailbox object
 
 Notes:
-- This keeps implementation simple and ensures `labels get` can resolve by name/role.
-- A future optimization could call `Mailbox/get` with `ids: [<id>]` once the id is known.
+- This keeps common human usage (`inbox`, `trash`, or mailbox names) simple, while still supporting fast id lookups when available.
 
 ---
 
