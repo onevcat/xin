@@ -1,0 +1,42 @@
+id: read_search_filter_json_passthrough_smoke
+it: filter-json is passed through to the server (no CLI allowlist), and server errors are surfaced
+requiresFresh: true
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+  smtpInject:
+    - authUser: bob
+      authPass: bob-pass
+      mailFrom: bob@example.org
+      rcptTo: [alice@example.org]
+      emlFile: tests/feature/stalwart/fixtures/simple_subject_space.eml
+
+steps:
+  - name: invalid filter-json is not rejected by xin; server decides
+    say:
+      - We intentionally pass an unknown filter key.
+      - xin should not validate/whitelist filter-json; it should send it and surface the server error.
+    xin:
+      args:
+        - search
+        - --filter-json
+        - '{"unknownFilter": true}'
+        - --max
+        - "1"
+    expectOk: false
+    expect:
+      - path: /error/kind
+        equals: jmapRequestError
+      - label: server error details attached
+        path: /error/jmap/type
+        exists: true

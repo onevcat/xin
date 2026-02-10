@@ -123,6 +123,7 @@ Query support policy (updated choice):
 
 1) **Prefer native JMAP filter JSON** (first-class, recommended for agents)
 - `--filter-json '<JMAP Email/query filter JSON>'`
+- xin treats this as **server-owned input**: it only parses the JSON, then sends it as-is (no whitelist / no semantic validation). Any server error is surfaced back to the caller.
 - This is the most precise and portable way to search across JMAP servers.
 
 2) **Provide a small xin query sugar** (v0 implemented, human-friendly)

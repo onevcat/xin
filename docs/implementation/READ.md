@@ -44,7 +44,7 @@ CLI contract says v0 uses:
 
 ### 1.1 Compile filter
 
-- If user provides `--filter-json`, parse it.
+- If user provides `--filter-json`, parse it as JSON (to ensure it is valid JSON), then **pass it through verbatim** to the server (no allowlist / CLI validation).
 - Otherwise parse sugar DSL and compile to `FilterCondition` / `FilterOperator`.
 
 ### 1.2 Email/query
@@ -87,7 +87,7 @@ Request (single JMAP request can include both methodCalls):
     ["Email/query", {"accountId":"A", "filter":{}, "sort":[{"property":"receivedAt","isAscending":false}], "collapseThreads":true, "position":0, "limit":20}, "q1"],
     ["Email/get", {
       "accountId": "A",
-      "ids": "#q1/ids",
+      "#ids": {"resultOf": "q1", "name": "Email/query", "path": "/ids"},
       "properties": [
         "id","threadId","receivedAt","subject",
         "from","to","preview","hasAttachment",

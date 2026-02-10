@@ -1,7 +1,5 @@
-use jmap_client::core::query::Filter as CoreFilter;
 use jmap_client::core::query::QueryResponse;
 use jmap_client::core::set::SetObject;
-use jmap_client::email;
 use jmap_client::email::Email;
 use jmap_client::identity;
 use jmap_client::mailbox;
@@ -9,6 +7,7 @@ use jmap_client::thread;
 
 use crate::error::XinErrorOut;
 use crate::jmap::XinJmap;
+use serde_json::{Value, json};
 
 pub struct SearchResult {
     pub query: QueryResponse,
@@ -267,76 +266,177 @@ impl Backend {
         }))
     }
 
-    pub async fn search(
+    /// Search using a raw JMAP filter JSON value (pass-through).
+    ///
+    /// This avoids xin enforcing a whitelist of filter fields at the CLI layer.
+    pub async fn search_raw_filter_json(
         &self,
-        filter: Option<CoreFilter<email::query::Filter>>,
+        filter_json: Value,
         position: i32,
         limit: usize,
         collapse_threads: bool,
         is_ascending: bool,
     ) -> Result<SearchResult, XinErrorOut> {
-        let mut req = self.j.client().build();
+        let client = self.j.client();
+        let session = client.session();
+        let api_url = session.api_url().to_string();
+        let account_id = client.default_account_id().to_string();
 
-        let q = req.query_email();
-        if let Some(f) = filter {
-            q.filter(f);
+        let mut query_args = json!({
+            "accountId": account_id,
+            "sort": [{"property": "receivedAt", "isAscending": is_ascending}],
+            "collapseThreads": collapse_threads,
+            "position": position,
+            "limit": limit
+        });
+
+        // JMAP requires `filter` to be an object; we still pass through as-is and
+        // let the server validate. However, omit empty object to match previous
+        // behavior (no filter).
+        if !filter_json.as_object().is_some_and(|o| o.is_empty()) {
+            query_args
+                .as_object_mut()
+                .expect("query args object")
+                .insert("filter".to_string(), filter_json);
         }
-        q.sort([email::query::Comparator::received_at().is_ascending(is_ascending)]);
-        q.limit(limit);
-        q.position(position);
-        q.arguments().collapse_threads(collapse_threads);
 
-        let ids_ref = q.result_reference();
+        let get_args = json!({
+            "accountId": client.default_account_id(),
+            "#ids": {"resultOf": "q0", "name": "Email/query", "path": "/ids"},
+            "properties": [
+                "id",
+                "threadId",
+                "receivedAt",
+                "subject",
+                "from",
+                "to",
+                "preview",
+                "hasAttachment",
+                "mailboxIds",
+                "keywords"
+            ]
+        });
 
-        let g = req.get_email();
-        g.ids_ref(ids_ref);
-        g.properties([
-            jmap_client::email::Property::Id,
-            jmap_client::email::Property::ThreadId,
-            jmap_client::email::Property::ReceivedAt,
-            jmap_client::email::Property::Subject,
-            jmap_client::email::Property::From,
-            jmap_client::email::Property::To,
-            jmap_client::email::Property::Preview,
-            jmap_client::email::Property::HasAttachment,
-            jmap_client::email::Property::MailboxIds,
-            jmap_client::email::Property::Keywords,
-        ]);
+        let request_body = json!({
+            "using": [
+                "urn:ietf:params:jmap:core",
+                "urn:ietf:params:jmap:mail"
+            ],
+            "methodCalls": [
+                ["Email/query", query_args, "q0"],
+                ["Email/get", get_args, "g0"]
+            ]
+        });
 
-        let response = req.send().await.map_err(|e| XinErrorOut {
-            kind: "jmapRequestError".to_string(),
-            message: format!("request failed: {e}"),
+        let http = reqwest::Client::builder()
+            .timeout(client.timeout())
+            .default_headers(client.headers().clone())
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("failed to build http client: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        let resp = http
+            .post(api_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("request failed: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("server returned {status}: {text}"),
+                http: Some(json!({"status": status.as_u16()})),
+                jmap: None,
+            });
+        }
+
+        let v: Value = resp.json().await.map_err(|e| XinErrorOut {
+            kind: "httpError".to_string(),
+            message: format!("invalid json response: {e}"),
             http: None,
             jmap: None,
         })?;
 
-        let mut query_resp: Option<QueryResponse> = None;
-        let mut get_resp: Option<jmap_client::core::response::EmailGetResponse> = None;
+        let mrs = v
+            .get("methodResponses")
+            .and_then(|x| x.as_array())
+            .ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "missing methodResponses".to_string(),
+                http: None,
+                jmap: None,
+            })?;
 
-        for mr in response.unwrap_method_responses() {
-            if mr.is_type(jmap_client::Method::QueryEmail) {
-                if let Ok(r) = mr.unwrap_query_email() {
-                    query_resp = Some(r);
-                }
+        let mut query: Option<QueryResponse> = None;
+        let mut get: Option<jmap_client::core::response::EmailGetResponse> = None;
+        let mut jmap_error: Option<Value> = None;
+
+        for mr in mrs {
+            let arr = mr.as_array().ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "invalid methodResponses entry".to_string(),
+                http: None,
+                jmap: None,
+            })?;
+            if arr.len() < 2 {
+                continue;
+            }
+            let name = arr[0].as_str().unwrap_or("");
+            if name == "error" {
+                jmap_error = Some(arr[1].clone());
                 continue;
             }
 
-            if mr.is_type(jmap_client::Method::GetEmail) {
-                if let Ok(r) = mr.unwrap_get_email() {
-                    get_resp = Some(r);
-                }
-                continue;
+            if name == "Email/query" {
+                query = serde_json::from_value(arr[1].clone()).ok();
+            } else if name == "Email/get" {
+                get = serde_json::from_value(arr[1].clone()).ok();
             }
         }
 
-        let query = query_resp.ok_or_else(|| XinErrorOut {
+        if let Some(err) = jmap_error {
+            let ty = err
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let desc = err
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let msg = if desc.is_empty() {
+                format!("JMAP error: {ty}")
+            } else {
+                format!("JMAP error: {ty}: {desc}")
+            };
+            return Err(XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: msg,
+                http: None,
+                jmap: Some(err),
+            });
+        }
+
+        let query = query.ok_or_else(|| XinErrorOut {
             kind: "jmapRequestError".to_string(),
             message: "missing Email/query response".to_string(),
             http: None,
             jmap: None,
         })?;
 
-        let mut get_resp = get_resp.ok_or_else(|| XinErrorOut {
+        let mut get = get.ok_or_else(|| XinErrorOut {
             kind: "jmapRequestError".to_string(),
             message: "missing Email/get response".to_string(),
             http: None,
@@ -345,7 +445,7 @@ impl Backend {
 
         Ok(SearchResult {
             query,
-            emails: get_resp.take_list(),
+            emails: get.take_list(),
         })
     }
 
@@ -442,7 +542,10 @@ impl Backend {
 
     pub async fn rename_mailbox(&self, mailbox_id: &str, name: &str) -> Result<(), XinErrorOut> {
         let mut request = self.j.client().build();
-        request.set_mailbox().update(mailbox_id).name(name.to_string());
+        request
+            .set_mailbox()
+            .update(mailbox_id)
+            .name(name.to_string());
 
         request
             .send_single::<jmap_client::core::response::MailboxSetResponse>()
@@ -759,7 +862,9 @@ impl Backend {
 
     pub async fn destroy_emails(&self, email_ids: &[String]) -> Result<(), XinErrorOut> {
         let mut request = self.j.client().build();
-        request.set_email().destroy(email_ids.iter().map(|s| s.as_str()));
+        request
+            .set_email()
+            .destroy(email_ids.iter().map(|s| s.as_str()));
 
         request
             .send_single::<jmap_client::core::response::EmailSetResponse>()
@@ -882,4 +987,3 @@ fn build_email_body(
 
     (root, body_values)
 }
-

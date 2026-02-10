@@ -1,6 +1,4 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use jmap_client::core::query::{Filter as CoreFilter, Operator};
-use jmap_client::email;
 use serde_json::{Value, json};
 
 use crate::backend::Backend;
@@ -8,11 +6,11 @@ use crate::cli::{
     AttachmentArgs, GetArgs, GetFormat, MessagesSearchArgs, SearchArgs, ThreadAttachmentsArgs,
     ThreadGetArgs,
 };
-use crate::sugar;
 use crate::config::read_json_arg;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
 use crate::schema;
+use crate::sugar;
 use std::fs;
 use std::path::PathBuf;
 
@@ -40,162 +38,6 @@ fn decode_page_token(s: &str) -> Result<PageToken, XinErrorOut> {
         .map_err(|e| XinErrorOut::usage(format!("invalid page token json: {e}")))
 }
 
-fn parse_filter_value(v: &Value) -> Result<Option<CoreFilter<email::query::Filter>>, XinErrorOut> {
-    let obj = match v.as_object() {
-        Some(o) => o,
-        None => {
-            return Err(XinErrorOut::usage(
-                "filter-json must be an object".to_string(),
-            ));
-        }
-    };
-
-    if obj.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(parse_filter(v)?))
-}
-
-fn parse_filter(v: &Value) -> Result<CoreFilter<email::query::Filter>, XinErrorOut> {
-    if let Some(op) = v.get("operator").and_then(|v| v.as_str()) {
-        let op = match op {
-            "AND" => Operator::And,
-            "OR" => Operator::Or,
-            "NOT" => Operator::Not,
-            other => return Err(XinErrorOut::usage(format!("unsupported operator: {other}"))),
-        };
-        let conditions = v
-            .get("conditions")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| XinErrorOut::usage("operator filter missing conditions[]".to_string()))?
-            .iter()
-            .map(parse_filter)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        return Ok(CoreFilter::operator(op, conditions));
-    }
-
-    let obj = v
-        .as_object()
-        .ok_or_else(|| XinErrorOut::usage("filter condition must be an object".to_string()))?;
-
-    let mut parts: Vec<CoreFilter<email::query::Filter>> = Vec::new();
-
-    for (k, vv) in obj {
-        let cond: email::query::Filter = match k.as_str() {
-            "inMailbox" => email::query::Filter::InMailbox {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("inMailbox must be string".to_string()))?
-                    .to_string(),
-            },
-            "hasAttachment" => email::query::Filter::HasAttachment {
-                value: vv
-                    .as_bool()
-                    .ok_or_else(|| XinErrorOut::usage("hasAttachment must be bool".to_string()))?,
-            },
-            "from" => email::query::Filter::From {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("from must be string".to_string()))?
-                    .to_string(),
-            },
-            "to" => email::query::Filter::To {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("to must be string".to_string()))?
-                    .to_string(),
-            },
-            "cc" => email::query::Filter::Cc {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("cc must be string".to_string()))?
-                    .to_string(),
-            },
-            "bcc" => email::query::Filter::Bcc {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("bcc must be string".to_string()))?
-                    .to_string(),
-            },
-            "subject" => email::query::Filter::Subject {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("subject must be string".to_string()))?
-                    .to_string(),
-            },
-            "text" => email::query::Filter::Text {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("text must be string".to_string()))?
-                    .to_string(),
-            },
-            "body" => email::query::Filter::Body {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("body must be string".to_string()))?
-                    .to_string(),
-            },
-            "hasKeyword" => email::query::Filter::HasKeyword {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("hasKeyword must be string".to_string()))?
-                    .to_string(),
-            },
-            "notKeyword" => email::query::Filter::NotKeyword {
-                value: vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("notKeyword must be string".to_string()))?
-                    .to_string(),
-            },
-            "after" => {
-                let s = vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("after must be RFC3339 string".to_string()))?;
-                let dt = chrono::DateTime::parse_from_rfc3339(s)
-                    .map_err(|e| XinErrorOut::usage(format!("invalid after date: {e}")))?
-                    .with_timezone(&chrono::Utc);
-                email::query::Filter::After { value: dt }
-            }
-            "before" => {
-                let s = vv
-                    .as_str()
-                    .ok_or_else(|| XinErrorOut::usage("before must be RFC3339 string".to_string()))?;
-                let dt = chrono::DateTime::parse_from_rfc3339(s)
-                    .map_err(|e| XinErrorOut::usage(format!("invalid before date: {e}")))?
-                    .with_timezone(&chrono::Utc);
-                email::query::Filter::Before { value: dt }
-            }
-            "minSize" => email::query::Filter::MinSize {
-                value: vv
-                    .as_u64()
-                    .ok_or_else(|| XinErrorOut::usage("minSize must be number".to_string()))?
-                    as u32,
-            },
-            "maxSize" => email::query::Filter::MaxSize {
-                value: vv
-                    .as_u64()
-                    .ok_or_else(|| XinErrorOut::usage("maxSize must be number".to_string()))?
-                    as u32,
-            },
-            other => {
-                return Err(XinErrorOut::usage(format!(
-                    "unsupported filter-json key: {other}"
-                )));
-            }
-        };
-
-        parts.push(cond.into());
-    }
-
-    if parts.len() == 1 {
-        Ok(parts.pop().unwrap())
-    } else {
-        Ok(CoreFilter::and(parts))
-    }
-}
-
 pub async fn search(
     command_name: &str,
     account: Option<String>,
@@ -216,10 +58,12 @@ pub async fn search(
             Err(e) => return Envelope::err(command_name, account, e),
         },
         None => match &args.query {
-            Some(q) if !q.trim().is_empty() => match sugar::compile_search_filter(q, &backend).await {
-                Ok(v) => v,
-                Err(e) => return Envelope::err(command_name, account, e),
-            },
+            Some(q) if !q.trim().is_empty() => {
+                match sugar::compile_search_filter(q, &backend).await {
+                    Ok(v) => v,
+                    Err(e) => return Envelope::err(command_name, account, e),
+                }
+            }
             _ => json!({}),
         },
     };
@@ -245,13 +89,14 @@ pub async fn search(
         None => (0, filter_json.clone()),
     };
 
-    let filter = match parse_filter_value(&filter_json) {
-        Ok(f) => f,
-        Err(e) => return Envelope::err(command_name, account, e),
-    };
-
     let result = match backend
-        .search(filter, position, limit, collapse_threads, is_ascending)
+        .search_raw_filter_json(
+            stable_filter_json.clone(),
+            position,
+            limit,
+            collapse_threads,
+            is_ascending,
+        )
         .await
     {
         Ok(r) => r,
@@ -353,7 +198,11 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
 
     let email = match args.format {
         GetFormat::Full => match backend
-            .get_email_full(&args.email_id, max_body_value_bytes, extra_header_props.clone())
+            .get_email_full(
+                &args.email_id,
+                max_body_value_bytes,
+                extra_header_props.clone(),
+            )
             .await
         {
             Ok(Some(e)) => e,
@@ -422,10 +271,7 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         let (mut data, warnings) = schema::get_email_full_data(&email, raw, max_body_value_bytes);
 
         if let Some(h) = headers_dict {
-            if let Some(email_obj) = data
-                .get_mut("email")
-                .and_then(|v| v.as_object_mut())
-            {
+            if let Some(email_obj) = data.get_mut("email").and_then(|v| v.as_object_mut()) {
                 email_obj.insert("headers".to_string(), Value::Object(h));
             }
         }
@@ -439,10 +285,7 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
         let mut data = schema::get_email_data(&email, raw);
 
         if let Some(h) = headers_dict {
-            if let Some(email_obj) = data
-                .get_mut("email")
-                .and_then(|v| v.as_object_mut())
-            {
+            if let Some(email_obj) = data.get_mut("email").and_then(|v| v.as_object_mut()) {
                 email_obj.insert("headers".to_string(), Value::Object(h));
             }
         }

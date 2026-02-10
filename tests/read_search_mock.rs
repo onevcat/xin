@@ -744,6 +744,60 @@ async fn mount_minimal_jmap_session(server: &MockServer) {
 }
 
 #[tokio::test]
+async fn filter_json_is_passed_through_and_server_errors_are_returned() {
+    let server = MockServer::start().await;
+
+    mount_minimal_jmap_session(&server).await;
+
+    // Server returns a JMAP error method response for invalid filters.
+    let jmap_error_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["error", {
+                "type": "invalidArguments",
+                "description": "invalid filter",
+                "methodName": "Email/query"
+            }, "q0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("\"Email/query\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(jmap_error_response))
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        // Not an object: old behavior would reject this at CLI level.
+        .args(["search", "--max", "10", "--filter-json", "\"nope\""])
+        .output()
+        .expect("run");
+
+    assert!(!output.status.success());
+
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
+
+    assert_eq!(
+        v.get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(|k| k.as_str()),
+        Some("jmapRequestError")
+    );
+
+    assert_eq!(
+        v.get("error")
+            .and_then(|e| e.get("jmap"))
+            .and_then(|j| j.get("type"))
+            .and_then(|t| t.as_str()),
+        Some("invalidArguments")
+    );
+}
+
+#[tokio::test]
 async fn search_sugar_parentheses_are_rejected_in_v0() {
     let server = MockServer::start().await;
 
