@@ -1075,11 +1075,18 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
             ["Mailbox/get", {
                 "accountId": "A",
                 "state": "s",
-                "list": [{
-                    "id": "mb1",
-                    "name": "Drafts",
-                    "role": "drafts"
-                }],
+                "list": [
+                    {
+                        "id": "mb1",
+                        "name": "Drafts",
+                        "role": "drafts"
+                    },
+                    {
+                        "id": "mbTrash",
+                        "name": "Trash",
+                        "role": "trash"
+                    }
+                ],
                 "notFound": []
             }, "m0"]
         ]
@@ -1136,6 +1143,14 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
     assert!(
         body_str.contains("mailboxIds/mb1") && body_str.contains("false"),
         "expected mailboxIds/mb1 removal in Email/set: {body_str}"
+    );
+    assert!(
+        body_str.contains("mailboxIds/mbTrash") && body_str.contains("true"),
+        "expected mailboxIds/mbTrash add in Email/set: {body_str}"
+    );
+    assert!(
+        body_str.contains("keywords/$draft") && body_str.contains("false"),
+        "expected keywords/$draft removal in Email/set: {body_str}"
     );
 }
 

@@ -251,15 +251,20 @@ Body structure rules reuse the same deterministic MIME builder as `send`/`drafts
 
 ---
 
-## 9) Drafts delete (non-destructive)
+## 10) Drafts delete (non-destructive)
 
 `xin drafts delete <draftEmailId>...` removes the Email(s) from the Drafts mailbox without destroying the Email object.
 
 Implementation:
 
 1) Resolve Drafts mailbox id (prefer role=`drafts`, then name fallback).
-2) `Email/set` update patch for each draft:
+2) Resolve Trash mailbox id (prefer role=`trash`, then name fallback).
+3) `Email/set` update patch for each draft:
    - `mailboxIds/<draftsMailboxId>` → false
+   - `mailboxIds/<trashMailboxId>` → true
+   - `keywords/$draft` → false
+
+Rationale: `Email.mailboxIds` must not become empty; moving to Trash preserves recoverability while removing from Drafts.
 
 Example:
 
@@ -280,7 +285,7 @@ Example:
 
 ---
 
-## 10) Drafts destroy (permanent)
+## 11) Drafts destroy (permanent)
 
 `xin drafts destroy <draftEmailId>...` permanently deletes the Email object(s) via `Email/set` destroy.
 

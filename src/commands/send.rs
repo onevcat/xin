@@ -1108,9 +1108,20 @@ pub async fn drafts_delete(account: Option<String>, args: &DraftsDeleteArgs) -> 
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    // Non-destructive delete: remove Drafts mailbox membership.
+    // Non-destructive delete: move draft out of Drafts and into Trash.
+    // Rationale: Email.mailboxIds must not become empty; some servers may reject removing the
+    // last mailbox membership. Moving to Trash preserves recoverability while removing from Drafts.
+    let trash_id = resolve_mailbox_id("trash", &mailboxes)
+        .ok_or_else(|| XinErrorOut::config("trash mailbox not found".to_string()));
+    let trash_id = match trash_id {
+        Ok(v) => v,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(drafts_id);
+    plan.add_mailboxes.push(trash_id);
+    plan.remove_keywords.push("$draft".to_string());
 
     if let Err(e) = backend.modify_emails(&args.draft_email_ids, &plan).await {
         return Envelope::err(command_name, account, e);
