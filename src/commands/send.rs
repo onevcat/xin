@@ -28,12 +28,43 @@ fn to_rfc3339(ts: Option<i64>) -> Option<String> {
 fn find_drafts_mailbox_id(
     mailboxes: &[jmap_client::mailbox::Mailbox],
 ) -> Result<String, XinErrorOut> {
-    mailboxes
+    // Prefer RFC role-based resolution, but some servers may omit roles.
+    if let Some(id) = mailboxes
         .iter()
         .find(|m| m.role() == jmap_client::mailbox::Role::Drafts)
         .and_then(|m| m.id())
-        .map(|id| id.to_string())
-        .ok_or_else(|| XinErrorOut::config("drafts mailbox not found".to_string()))
+    {
+        return Ok(id.to_string());
+    }
+
+    // Fallback: name match.
+    if let Some(id) = mailboxes
+        .iter()
+        .find(|m| m.name() == Some("Drafts"))
+        .and_then(|m| m.id())
+    {
+        return Ok(id.to_string());
+    }
+
+    let want = "drafts";
+    if let Some(id) = mailboxes
+        .iter()
+        .find(|m| m.name().map(|n| n.to_lowercase()) == Some(want.to_string()))
+        .and_then(|m| m.id())
+    {
+        return Ok(id.to_string());
+    }
+
+    // Some servers/users may use singular naming.
+    if let Some(id) = mailboxes
+        .iter()
+        .find(|m| m.name().map(|n| n.to_lowercase()) == Some("draft".to_string()))
+        .and_then(|m| m.id())
+    {
+        return Ok(id.to_string());
+    }
+
+    Err(XinErrorOut::config("drafts mailbox not found".to_string()))
 }
 
 fn resolve_identity(

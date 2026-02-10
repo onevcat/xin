@@ -74,6 +74,7 @@ async fn drafts_list_works_against_mock_jmap() {
         ]
     });
 
+
     Mock::given(method("POST"))
         .and(path("/jmap"))
         .and(body_string_contains("Mailbox/get"))
@@ -578,4 +579,177 @@ async fn drafts_destroy_sends_email_set_destroy_when_forced() {
             .and_then(|x| x.as_str()),
         Some("m1")
     );
+}
+
+#[tokio::test]
+async fn drafts_list_works_with_drafts_name_fallback_when_role_missing() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .mount(&server)
+        .await;
+
+    let list_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/query", {
+                "accountId": "A",
+                "queryState": "s",
+                "canCalculateChanges": false,
+                "position": 0,
+                "ids": ["m1"],
+                "total": 1
+            }, "q0"],
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1",
+                    "receivedAt": "2026-02-08T00:00:00Z",
+                    "subject": "Draft",
+                    "from": [{"name": "Me", "email": "me@example.com"}],
+                    "to": [{"name": null, "email": "you@example.com"}],
+                    "preview": "preview",
+                    "hasAttachment": false,
+                    "mailboxIds": {"mb1": true},
+                    "keywords": {"$draft": true}
+                }],
+                "notFound": []
+            }, "q1"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/query"))
+        .and(body_string_contains("\"inMailbox\":\"mb1\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(list_response))
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["drafts", "list", "--max", "5"])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
+}
+
+#[tokio::test]
+async fn drafts_create_works_with_drafts_name_fallback_when_role_missing() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .mount(&server)
+        .await;
+
+    let identity_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Identity/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "i1",
+                    "name": "Me",
+                    "email": "me@example.com"
+                }],
+                "notFound": []
+            }, "i0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Identity/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(identity_response))
+        .mount(&server)
+        .await;
+
+    let email_set_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {
+                    "c0": { "id": "m1", "threadId": "t1" }
+                }
+            }, "e0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("multipart/alternative"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args([
+            "drafts",
+            "create",
+            "--to",
+            "you@example.com",
+            "--subject",
+            "Hi",
+            "--body",
+            "Hello",
+            "--body-html",
+            "<b>Hello</b>",
+        ])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
 }
