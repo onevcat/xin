@@ -974,6 +974,16 @@ fn build_email_body(
             if let Some(name) = &a.name {
                 p = p.name(name.clone());
             }
+
+            // jmap-client does not currently expose a builder for EmailBodyPart.disposition.
+            // Use a JSON round-trip to set it explicitly so attachments are marked as attachments.
+            let mut v = serde_json::to_value(&p).expect("part json");
+            v.as_object_mut().expect("part object").insert(
+                "disposition".to_string(),
+                Value::String("attachment".to_string()),
+            );
+            let p: PartSet = serde_json::from_value(v).expect("part from json");
+
             mixed = mixed.sub_part(p.into());
         }
         mixed

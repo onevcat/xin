@@ -393,6 +393,7 @@ async fn send_html_and_attachment_uploads_and_sets_body_structure() {
         .and(body_string_contains("multipart/alternative"))
         .and(body_string_contains("\"blobId\":\"b1\""))
         .and(body_string_contains("other@example.com"))
+        .and(body_string_contains("\"disposition\":\"attachment\""))
         .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
         .expect(1)
         .mount(&server)
