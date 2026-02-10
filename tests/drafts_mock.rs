@@ -1,7 +1,10 @@
 use assert_cmd::Command;
 use serde_json::json;
-use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::matchers::{body_string_contains, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use std::io::Write;
+use tempfile::NamedTempFile;
 
 fn mock_session(server: &MockServer) -> serde_json::Value {
     json!({
@@ -73,7 +76,6 @@ async fn drafts_list_works_against_mock_jmap() {
             }, "m0"]
         ]
     });
-
 
     Mock::given(method("POST"))
         .and(path("/jmap"))
@@ -358,6 +360,440 @@ async fn drafts_update_subject_works_against_mock_jmap() {
 }
 
 #[tokio::test]
+async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    // 1) Email/get(full) to preserve existing body + attachments.
+    let full_get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1",
+                    "bodyStructure": {
+                        "type": "multipart/mixed",
+                        "subParts": [
+                            {"type": "text/plain", "partId": "text"},
+                            {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "disposition": "attachment"}
+                        ]
+                    },
+                    "bodyValues": {"text": {"value": "old body"}},
+                    "attachments": [
+                        {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "size": 3, "disposition": "attachment"}
+                    ]
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("bodyStructure"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(full_get_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // 2) Upload new attachment.
+    Mock::given(method("POST"))
+        .and(path("/upload/A"))
+        .and(header("content-type", "application/pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "accountId": "A",
+            "blobId": "b_new",
+            "type": "application/pdf",
+            "size": 3
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // 3) Email/set(update) must include both old + new attachment blobIds.
+    let update_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "updated": {"m1": null}
+            }, "u0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"update\""))
+        .and(body_string_contains("\"blobId\":\"b_old\""))
+        .and(body_string_contains("\"blobId\":\"b_new\""))
+        .and(body_string_contains("\"disposition\":\"attachment\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // 4) Email/get minimal to fetch threadId for output stability.
+    let get_min_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1"
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut f = NamedTempFile::new().expect("tmp");
+    f.write_all(b"PDF").expect("write");
+    let p = f.path().with_extension("pdf");
+    std::fs::rename(f.path(), &p).expect("rename");
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["drafts", "update", "m1", "--attach", p.to_str().unwrap()])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+}
+
+#[tokio::test]
+async fn drafts_update_replace_attachments_drops_existing() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    // Email/get(full) to discover existing attachments.
+    let full_get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1",
+                    "bodyStructure": {
+                        "type": "multipart/mixed",
+                        "subParts": [
+                            {"type": "text/plain", "partId": "text"},
+                            {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "disposition": "attachment"}
+                        ]
+                    },
+                    "bodyValues": {"text": {"value": "old body"}},
+                    "attachments": [
+                        {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "size": 3, "disposition": "attachment"}
+                    ]
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("bodyStructure"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(full_get_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Upload new attachment.
+    Mock::given(method("POST"))
+        .and(path("/upload/A"))
+        .and(header("content-type", "application/pdf"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "accountId": "A",
+            "blobId": "b_new",
+            "type": "application/pdf",
+            "size": 3
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Guardrail: update must NOT include old attachment blobId.
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"blobId\":\"b_old\""))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let update_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "updated": {"m1": null}
+            }, "u0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"update\""))
+        .and(body_string_contains("\"blobId\":\"b_new\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let get_min_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1"
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut f = NamedTempFile::new().expect("tmp");
+    f.write_all(b"PDF").expect("write");
+    let p = f.path().with_extension("pdf");
+    std::fs::rename(f.path(), &p).expect("rename");
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args([
+            "drafts",
+            "update",
+            "m1",
+            "--replace-attachments",
+            "--attach",
+            p.to_str().unwrap(),
+        ])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+}
+
+#[tokio::test]
+async fn drafts_update_clear_attachments_removes_all() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    let full_get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1",
+                    "bodyStructure": {
+                        "type": "multipart/mixed",
+                        "subParts": [
+                            {"type": "text/plain", "partId": "text"},
+                            {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "disposition": "attachment"}
+                        ]
+                    },
+                    "bodyValues": {"text": {"value": "old body"}},
+                    "attachments": [
+                        {"type": "application/pdf", "blobId": "b_old", "name": "old.pdf", "size": 3, "disposition": "attachment"}
+                    ]
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("bodyStructure"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(full_get_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // No uploads should happen.
+    Mock::given(method("POST"))
+        .and(path("/upload/A"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    // Guardrail: update must NOT include old attachment blobId.
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"blobId\":\"b_old\""))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let update_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "updated": {"m1": null}
+            }, "u0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"update\""))
+        .and(body_string_contains("text/plain"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let get_min_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1"
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["drafts", "update", "m1", "--clear-attachments"])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+}
+
+#[tokio::test]
+async fn drafts_update_replace_attachments_requires_attach() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["drafts", "update", "m1", "--replace-attachments"])
+        .output()
+        .expect("run");
+
+    assert!(!output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        v.get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(|k| k.as_str()),
+        Some("xinUsageError")
+    );
+}
+
+#[tokio::test]
+async fn drafts_update_clear_attachments_cannot_combine_with_attach() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args([
+            "drafts",
+            "update",
+            "m1",
+            "--clear-attachments",
+            "--attach",
+            "a.pdf",
+        ])
+        .output()
+        .expect("run");
+
+    assert!(!output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        v.get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(|k| k.as_str()),
+        Some("xinUsageError")
+    );
+}
+
+#[tokio::test]
 async fn drafts_send_works_against_mock_jmap() {
     let server = MockServer::start().await;
     mount_session(&server).await;
@@ -512,7 +948,10 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
         .find(|r| String::from_utf8_lossy(&r.body).contains("Email/set"))
         .expect("Email/set request");
     let body_str = String::from_utf8_lossy(&email_set.body);
-    assert!(!body_str.contains("\"destroy\""), "expected no destroy in Email/set: {body_str}");
+    assert!(
+        !body_str.contains("\"destroy\""),
+        "expected no destroy in Email/set: {body_str}"
+    );
     assert!(
         body_str.contains("mailboxIds/mb1") && body_str.contains("false"),
         "expected mailboxIds/mb1 removal in Email/set: {body_str}"
@@ -529,9 +968,14 @@ async fn drafts_destroy_requires_force() {
     assert!(!output.status.success());
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("drafts.destroy"));
     assert_eq!(
-        v.get("error").and_then(|e| e.get("kind")).and_then(|k| k.as_str()),
+        v.get("command").and_then(|v| v.as_str()),
+        Some("drafts.destroy")
+    );
+    assert_eq!(
+        v.get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(|k| k.as_str()),
         Some("xinUsageError")
     );
 }
