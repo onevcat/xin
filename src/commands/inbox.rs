@@ -59,7 +59,11 @@ pub async fn next(account: Option<String>, args: &InboxNextArgs) -> Envelope<Val
     env
 }
 
-pub async fn do_action(account: Option<String>, args: &InboxDoArgs, dry_run: bool) -> Envelope<Value> {
+pub async fn do_action(
+    account: Option<String>,
+    args: &InboxDoArgs,
+    dry_run: bool,
+) -> Envelope<Value> {
     // v0: keep it simple; map to existing organize sugar.
     let command_name = "inbox.do";
 

@@ -191,24 +191,47 @@ Implementation outline:
 
 ---
 
-## 7) Drafts update
+## 7) Drafts update (metadata-only)
 
-`xin drafts update <draftEmailId> ...` uses `Email/set` update.
+`xin drafts update <draftEmailId> ...` performs an **in-place** `Email/set` update that MUST NOT change the draft id.
 
 Key semantics (v0):
 
-- If updating identity (`--identity`): resolve by Identity id or email.
-- For body/attachments changes, xin first fetches the current draft (full) to avoid accidentally dropping fields the user did not specify.
-- Attachment flags:
-  - default: keep existing attachments, and append any new uploads.
-  - `--replace-attachments`: discard existing attachments and use only the newly uploaded ones.
-  - `--clear-attachments`: remove all attachments.
+- This command is **metadata-only**: it can modify mailbox membership and keywords.
+- It MUST NOT attempt to modify message content (subject/from/to/body/attachments), because JMAP (RFC 8621) defines those Email properties as immutable and servers may reject such updates.
+
+Flags mirror `batch modify` / ORGANIZE semantics:
+
+- `--add/--remove`: auto route (mailbox if resolvable, otherwise keyword)
+- `--add-mailbox/--remove-mailbox`
+- `--add-keyword/--remove-keyword`
+
+---
+
+## 8) Drafts rewrite (content)
+
+`xin drafts rewrite <draftEmailId> ...` rewrites message content by **creating a new draft** and replacing the old one.
+
+Key semantics (v0):
+
+- Returns a **new** `draft.emailId` (id may change).
+- Includes `replacedFrom` to indicate which draft was replaced.
+- Default cleanup of the old draft is **non-destructive**:
+  - remove Drafts mailbox membership
+  - unset `$draft` keyword
+- Optional: `--destroy-old` will permanently destroy the replaced draft, but requires global `--force`.
+
+Attachment flags:
+
+- default: keep existing attachments, and append any new uploads.
+- `--replace-attachments`: discard existing attachments and use only the newly uploaded ones.
+- `--clear-attachments`: remove all attachments.
 
 Body structure rules reuse the same deterministic MIME builder as `send`/`drafts create`.
 
 ---
 
-## 8) Drafts send
+## 9) Drafts send
 
 `xin drafts send <draftEmailId>` only needs EmailSubmission/set:
 

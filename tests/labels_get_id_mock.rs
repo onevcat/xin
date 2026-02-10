@@ -104,7 +104,10 @@ async fn labels_get_by_id_uses_mailbox_get_ids() {
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("labels.get"));
+    assert_eq!(
+        v.get("command").and_then(|v| v.as_str()),
+        Some("labels.get")
+    );
     assert_eq!(
         v.get("data")
             .and_then(|d| d.get("mailbox"))

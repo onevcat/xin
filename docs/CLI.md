@@ -544,10 +544,17 @@ Drafts are emails in the Drafts mailbox.
 - MUST include membership of the Drafts mailbox.
 - Body/attachments follow the exact same rules as `xin send` (uploadUrl + blobId; deterministic MIME layout).
 
-#### `xin drafts update <draftEmailId> [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--body ...|--body-file ...] [--body-html ...] [--attach ...] [--replace-attachments] [--clear-attachments] [--identity <id|email>]` (v0)
-- Updates the existing draft via `Email/set` `update`.
-- Only fields provided on the CLI are updated; unspecified fields remain unchanged.
-- If any of body/attachments are modified, xin may fetch the existing draft (`Email/get`) to preserve unspecified body parts/attachments.
+#### `xin drafts update <draftEmailId> [--add ...] [--remove ...] [--add-mailbox ...] [--remove-mailbox ...] [--add-keyword ...] [--remove-keyword ...]` (v0)
+- **Metadata-only** in-place update via `Email/set` `update`.
+- Designed to **never change** the draft id.
+- Auto routing rules:
+  - `--add/--remove`: if the token resolves to a mailbox (by id/role/name), it is treated as mailbox; otherwise treated as a keyword.
+
+#### `xin drafts rewrite <draftEmailId> [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--body ...|--body-file ...] [--body-html ...] [--attach ...] [--replace-attachments] [--clear-attachments] [--identity <id|email>] [--destroy-old]` (v0)
+- Rewrites message content by creating a **new** draft (`Email/set` create) and replacing the old one.
+- Returns a new `draft.emailId` (id may change) and includes `replacedFrom`.
+- Default cleanup is **non-destructive** (remove Drafts membership + unset `$draft`).
+- `--destroy-old` permanently destroys the replaced draft, but requires global `--force`.
 - Attachment behavior:
   - `--attach <path>` appends attachments by default.
   - `--replace-attachments` replaces existing attachments (requires at least one `--attach`).

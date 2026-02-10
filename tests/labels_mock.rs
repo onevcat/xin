@@ -116,10 +116,7 @@ async fn labels_list_works_against_mock_jmap() {
 
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].get("id").and_then(|v| v.as_str()), Some("mb1"));
-    assert_eq!(
-        items[0].get("role").and_then(|v| v.as_str()),
-        Some("inbox")
-    );
+    assert_eq!(items[0].get("role").and_then(|v| v.as_str()), Some("inbox"));
 }
 
 #[tokio::test]

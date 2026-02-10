@@ -1,0 +1,150 @@
+id: write_drafts_rewrite_attachments_smoke
+it: drafts rewrite attachment flags (append/replace/clear) work end-to-end (Stalwart)
+requiresFresh: true
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+steps:
+  - name: create draft with one attachment (tiny.pdf)
+    xin:
+      args:
+        - drafts
+        - create
+        - --to
+        - bob@example.org
+        - --subject
+        - "drafts update e2e"
+        - --body
+        - "hello"
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.pdf
+    expect:
+      - path: /data/draft/emailId
+        exists: true
+    save:
+      draftId: /data/draft/emailId
+
+  - name: get draft full (initial attachment)
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments/0/name
+        equals: tiny.pdf
+      - path: /data/attachments/0/disposition
+        equals: attachment
+
+  - name: rewrite draft (default append) add tiny.bin
+    xin:
+      args:
+        - drafts
+        - rewrite
+        - ${draftId}
+        - --attach
+        - tests/feature/stalwart/fixtures/tiny.bin
+    expect:
+      - path: /data/draft/emailId
+        exists: true
+      - path: /data/replacedFrom
+        equals: ${draftId}
+    save:
+      draftId: /data/draft/emailId
+
+  - name: get draft full (should have pdf then bin)
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments/0/name
+        equals: tiny.pdf
+      - path: /data/attachments/1/name
+        equals: tiny.bin
+      - path: /data/attachments/1/disposition
+        equals: attachment
+
+  - name: rewrite draft (replace attachments) set send_body.txt only
+    xin:
+      args:
+        - drafts
+        - rewrite
+        - ${draftId}
+        - --replace-attachments
+        - --attach
+        - tests/feature/stalwart/fixtures/send_body.txt
+    expect:
+      - path: /data/draft/emailId
+        exists: true
+      - path: /data/replacedFrom
+        equals: ${draftId}
+    save:
+      draftId: /data/draft/emailId
+
+  - name: get draft full (first attachment should be send_body.txt)
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments/0/name
+        equals: send_body.txt
+      - path: /data/attachments/0/disposition
+        equals: attachment
+
+  - name: rewrite draft (clear attachments)
+    xin:
+      args:
+        - drafts
+        - rewrite
+        - ${draftId}
+        - --clear-attachments
+    expect:
+      - path: /data/draft/emailId
+        exists: true
+      - path: /data/replacedFrom
+        equals: ${draftId}
+    save:
+      draftId: /data/draft/emailId
+
+  - name: get draft full (attachments cleared)
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - full
+    expect:
+      - path: /data/attachments
+        equals: []
+
+  - name: send the draft after updates
+    xin:
+      args:
+        - drafts
+        - send
+        - ${draftId}
+    expect:
+      - path: /data/submission/id
+        exists: true

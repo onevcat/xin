@@ -45,7 +45,10 @@ fn mock_session(server: &MockServer) -> serde_json::Value {
     })
 }
 
-fn find_single_method_args(body: &serde_json::Value, method_name: &str) -> Option<serde_json::Value> {
+fn find_single_method_args(
+    body: &serde_json::Value,
+    method_name: &str,
+) -> Option<serde_json::Value> {
     let calls = body.get("methodCalls")?.as_array()?;
     for c in calls {
         let arr = c.as_array()?;
@@ -115,13 +118,7 @@ async fn batch_modify_emits_patch_keys_for_mailbox_and_keyword() {
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
         .args([
-            "batch",
-            "modify",
-            "m1",
-            "--add",
-            "inbox",
-            "--add",
-            "$flagged",
+            "batch", "modify", "m1", "--add", "inbox", "--add", "$flagged",
         ])
         .output()
         .expect("run");
@@ -154,7 +151,10 @@ async fn batch_modify_emits_patch_keys_for_mailbox_and_keyword() {
         .and_then(|v| v.as_object())
         .expect("update object");
 
-    let u = update.get("m1").and_then(|v| v.as_object()).expect("m1 patch");
+    let u = update
+        .get("m1")
+        .and_then(|v| v.as_object())
+        .expect("m1 patch");
 
     // For non-replace mailbox updates, we expect patch keys like "mailboxIds/<id>" and
     // "keywords/<kw>".
