@@ -90,9 +90,12 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
             DraftsCommand::List(args) => send::drafts_list(account.clone(), args).await,
             DraftsCommand::Get(args) => send::drafts_get(account.clone(), args).await,
             DraftsCommand::Create(args) => send::drafts_create(account.clone(), args).await,
-            DraftsCommand::Delete(args) => send::drafts_delete(account.clone(), args).await,
-            DraftsCommand::Send(args) => send::drafts_send(account.clone(), args).await,
             DraftsCommand::Update(args) => send::drafts_update(account.clone(), args).await,
+            DraftsCommand::Delete(args) => send::drafts_delete(account.clone(), args).await,
+            DraftsCommand::Destroy(args) => {
+                send::drafts_destroy(account.clone(), args, cli.force).await
+            }
+            DraftsCommand::Send(args) => send::drafts_send(account.clone(), args).await,
         },
 
         _ => {
@@ -164,6 +167,7 @@ fn command_name(cmd: &Command) -> (String, Option<String>) {
             DraftsCommand::Create(_) => ("drafts.create".to_string(), None),
             DraftsCommand::Update(_) => ("drafts.update".to_string(), None),
             DraftsCommand::Delete(_) => ("drafts.delete".to_string(), None),
+            DraftsCommand::Destroy(_) => ("drafts.destroy".to_string(), None),
             DraftsCommand::Send(_) => ("drafts.send".to_string(), None),
         },
         Command::History(_) => ("history".to_string(), None),

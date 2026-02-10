@@ -520,7 +520,10 @@ pub enum DraftsCommand {
     Get(DraftsGetArgs),
     Create(DraftsCreateArgs),
     Update(DraftsUpdateArgs),
+    /// Remove draft(s) from the Drafts mailbox (non-destructive).
     Delete(DraftsDeleteArgs),
+    /// Permanently destroy draft email(s). Requires global --force.
+    Destroy(DraftsDestroyArgs),
     Send(DraftsSendArgs),
 }
 
@@ -615,6 +618,11 @@ pub struct DraftsUpdateArgs {
 
 #[derive(Args, Debug)]
 pub struct DraftsDeleteArgs {
+    pub draft_email_ids: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct DraftsDestroyArgs {
     pub draft_email_ids: Vec<String>,
 }
 

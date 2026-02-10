@@ -447,7 +447,96 @@ async fn drafts_send_works_against_mock_jmap() {
 }
 
 #[tokio::test]
-async fn drafts_delete_works_against_mock_jmap() {
+async fn drafts_delete_removes_membership_from_drafts_mailbox() {
+    let server = MockServer::start().await;
+    mount_session(&server).await;
+
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .mount(&server)
+        .await;
+
+    let email_set_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "updated": {"m1": null}
+            }, "u0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["drafts", "delete", "m1"])
+        .output()
+        .expect("run");
+
+    assert!(output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
+
+    // Ensure we didn't send a destroy.
+    let requests = server.received_requests().await.expect("requests");
+    let email_set = requests
+        .iter()
+        .find(|r| String::from_utf8_lossy(&r.body).contains("Email/set"))
+        .expect("Email/set request");
+    let body_str = String::from_utf8_lossy(&email_set.body);
+    assert!(!body_str.contains("\"destroy\""), "expected no destroy in Email/set: {body_str}");
+    assert!(
+        body_str.contains("mailboxIds/mb1") && body_str.contains("false"),
+        "expected mailboxIds/mb1 removal in Email/set: {body_str}"
+    );
+}
+
+#[tokio::test]
+async fn drafts_destroy_requires_force() {
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .args(["drafts", "destroy", "m1"])
+        .output()
+        .expect("run");
+
+    assert!(!output.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("drafts.destroy"));
+    assert_eq!(
+        v.get("error").and_then(|e| e.get("kind")).and_then(|k| k.as_str()),
+        Some("xinUsageError")
+    );
+}
+
+#[tokio::test]
+async fn drafts_destroy_sends_email_set_destroy_when_forced() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -466,7 +555,7 @@ async fn drafts_delete_works_against_mock_jmap() {
     Mock::given(method("POST"))
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
-        .and(body_string_contains("\"destroy\""))
+        .and(body_string_contains("\"destroy\":[\"m1\"]"))
         .respond_with(ResponseTemplate::new(200).set_body_json(delete_response))
         .mount(&server)
         .await;
@@ -474,7 +563,7 @@ async fn drafts_delete_works_against_mock_jmap() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["drafts", "delete", "m1"])
+        .args(["--force", "drafts", "destroy", "m1"])
         .output()
         .expect("run");
 
@@ -483,9 +572,10 @@ async fn drafts_delete_works_against_mock_jmap() {
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
     assert_eq!(
         v.get("data")
-            .and_then(|d| d.get("deleted"))
+            .and_then(|d| d.get("destroyed"))
             .and_then(|v| v.as_array())
-            .map(|v| v.len()),
-        Some(1)
+            .and_then(|a| a.get(0))
+            .and_then(|x| x.as_str()),
+        Some("m1")
     );
 }

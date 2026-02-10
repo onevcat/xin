@@ -421,10 +421,16 @@ All `xin drafts ...` commands use the same envelope; their `data` shapes are:
 { "draft": { "emailId": "M...", "threadId": "T..." }, "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ] }
 ```
 
-- `drafts delete`:
+- `drafts delete` (remove from Drafts mailbox; non-destructive):
 
 ```json
 { "deleted": ["M..."] }
+```
+
+- `drafts destroy` (permanent; requires `--force`):
+
+```json
+{ "destroyed": ["M..."] }
 ```
 
 ---

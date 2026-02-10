@@ -185,3 +185,54 @@ Normalize to `SCHEMA.md §7.2`.
   ]
 }
 ```
+
+---
+
+## 6) Drafts delete (non-destructive)
+
+`xin drafts delete <draftEmailId>...` removes the Email(s) from the Drafts mailbox without destroying the Email object.
+
+Implementation:
+
+1) Resolve Drafts mailbox id (prefer role=`drafts`, then name fallback).
+2) `Email/set` update patch for each draft:
+   - `mailboxIds/<draftsMailboxId>` → false
+
+Example:
+
+```json
+{
+  "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],
+  "methodCalls": [
+    ["Email/set", {
+      "accountId": "A",
+      "update": {
+        "M1": { "mailboxIds/<draftsMailboxId>": false },
+        "M2": { "mailboxIds/<draftsMailboxId>": false }
+      }
+    }, "e1"]
+  ]
+}
+```
+
+---
+
+## 7) Drafts destroy (permanent)
+
+`xin drafts destroy <draftEmailId>...` permanently deletes the Email object(s) via `Email/set` destroy.
+
+- Destructive: requires `--force`.
+
+Example:
+
+```json
+{
+  "using": ["urn:ietf:params:jmap:core","urn:ietf:params:jmap:mail"],
+  "methodCalls": [
+    ["Email/set", {
+      "accountId": "A",
+      "destroy": ["M1", "M2"]
+    }, "e1"]
+  ]
+}
+```

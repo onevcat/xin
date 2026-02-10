@@ -553,7 +553,11 @@ Drafts are emails in the Drafts mailbox.
   - `--clear-attachments` removes all attachments (cannot be combined with `--attach`).
 
 #### `xin drafts delete <draftEmailId>...` (v0)
-- Removes the Email from the Drafts mailbox (and MAY destroy if no remaining mailboxes, server-defined).
+- **Non-destructive**: removes the Email from the Drafts mailbox (does not permanently delete the Email object).
+
+#### `xin drafts destroy <draftEmailId>...` (v0)
+- **Destructive**: permanently deletes the Email object via `Email/set` destroy.
+- Requires global `--force`.
 
 #### `xin drafts send <draftEmailId> [--identity <id|email>]` (v0)
 - Creates an `EmailSubmission` referencing the existing draft.

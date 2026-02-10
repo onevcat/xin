@@ -3,10 +3,10 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use crate::backend::{Backend, UploadedBlob};
+use crate::backend::{Backend, ModifyPlan, UploadedBlob};
 use crate::cli::{
-    DraftsCreateArgs, DraftsDeleteArgs, DraftsGetArgs, DraftsListArgs, DraftsSendArgs,
-    DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
+    DraftsCreateArgs, DraftsDeleteArgs, DraftsDestroyArgs, DraftsGetArgs, DraftsListArgs,
+    DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
 };
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -855,7 +855,21 @@ pub async fn drafts_delete(account: Option<String>, args: &DraftsDeleteArgs) -> 
         );
     }
 
-    if let Err(e) = backend.destroy_emails(&args.draft_email_ids).await {
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    // Non-destructive delete: remove Drafts mailbox membership.
+    let mut plan = ModifyPlan::default();
+    plan.remove_mailboxes.push(drafts_id);
+
+    if let Err(e) = backend.modify_emails(&args.draft_email_ids, &plan).await {
         return Envelope::err(command_name, account, e);
     }
 
@@ -863,6 +877,46 @@ pub async fn drafts_delete(account: Option<String>, args: &DraftsDeleteArgs) -> 
         command_name,
         account,
         json!({"deleted": args.draft_email_ids}),
+        Meta::default(),
+    )
+}
+
+pub async fn drafts_destroy(
+    account: Option<String>,
+    args: &DraftsDestroyArgs,
+    force: bool,
+) -> Envelope<Value> {
+    let command_name = "drafts.destroy";
+
+    if !force {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("drafts destroy is destructive; pass --force".to_string()),
+        );
+    }
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    if args.draft_email_ids.is_empty() {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("missing draft id".to_string()),
+        );
+    }
+
+    if let Err(e) = backend.destroy_emails(&args.draft_email_ids).await {
+        return Envelope::err(command_name, account, e);
+    }
+
+    Envelope::ok(
+        command_name,
+        account,
+        json!({"destroyed": args.draft_email_ids}),
         Meta::default(),
     )
 }
