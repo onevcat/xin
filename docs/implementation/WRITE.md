@@ -69,6 +69,7 @@ xin v0 uses a deterministic `bodyStructure` + `bodyValues` layout for both `send
 
 - If plain+html: create a `multipart/alternative` as the body.
 - If any attachments exist: wrap in top-level `multipart/mixed` and append attachment parts.
+- Attachment parts MUST include `disposition="attachment"` (v0 explicit).
 
 In JMAP terms:
 - Use `bodyStructure` (tree of EmailBodyPart)
@@ -102,7 +103,7 @@ Example (simplified):
             "subParts": [
               {
                 "type": "text/plain",
-                "partId": "p1"
+                "partId": "text"
               },
               {
                 "type": "application/pdf",
@@ -113,7 +114,7 @@ Example (simplified):
             ]
           },
           "bodyValues": {
-            "p1": {"value": "hi"}
+            "text": {"value": "hi"}
           }
         }
       }
@@ -135,8 +136,8 @@ The response `created.d1.id` is the new draft emailId.
 
 Create an EmailSubmission referencing the emailId and an identityId.
 
-- If user passed `--identity`, pick that Identity.
-- Otherwise use the server’s default behavior (TBD: pick first identity returned).
+- If user passed `--identity`, pick that Identity (match by Identity id or email).
+- Otherwise pick the first identity returned by `Identity/get`.
 
 The RFC allows `envelope` to be null/omitted; server must derive recipients from headers.
 
@@ -168,7 +169,46 @@ Normalize to `SCHEMA.md §7.2`.
 
 ---
 
-## 5) Drafts send
+## 5) Drafts list
+
+`xin drafts list` is implemented as a read-only query against the Drafts mailbox.
+
+Implementation outline:
+
+1) Resolve Drafts mailbox id (prefer role=`drafts`, then name fallback).
+2) `Email/query` with `filter={"inMailbox":"<draftsMailboxId>"}` and `collapseThreads=false`.
+3) `Email/get` to hydrate summary fields (same properties as READ search).
+4) Paging uses the same `--page` token contract as READ search (position/limit + stable filter).
+
+---
+
+## 6) Drafts get
+
+`xin drafts get <draftEmailId>` is equivalent to `xin get`, but returns the email object under `data.draft`.
+
+- Uses `Email/get`.
+- Supports `--format metadata|full|raw`.
+
+---
+
+## 7) Drafts update
+
+`xin drafts update <draftEmailId> ...` uses `Email/set` update.
+
+Key semantics (v0):
+
+- If updating identity (`--identity`): resolve by Identity id or email.
+- For body/attachments changes, xin first fetches the current draft (full) to avoid accidentally dropping fields the user did not specify.
+- Attachment flags:
+  - default: keep existing attachments, and append any new uploads.
+  - `--replace-attachments`: discard existing attachments and use only the newly uploaded ones.
+  - `--clear-attachments`: remove all attachments.
+
+Body structure rules reuse the same deterministic MIME builder as `send`/`drafts create`.
+
+---
+
+## 8) Drafts send
 
 `xin drafts send <draftEmailId>` only needs EmailSubmission/set:
 
@@ -188,7 +228,7 @@ Normalize to `SCHEMA.md §7.2`.
 
 ---
 
-## 6) Drafts delete (non-destructive)
+## 9) Drafts delete (non-destructive)
 
 `xin drafts delete <draftEmailId>...` removes the Email(s) from the Drafts mailbox without destroying the Email object.
 
@@ -217,7 +257,7 @@ Example:
 
 ---
 
-## 7) Drafts destroy (permanent)
+## 10) Drafts destroy (permanent)
 
 `xin drafts destroy <draftEmailId>...` permanently deletes the Email object(s) via `Email/set` destroy.
 
