@@ -682,6 +682,10 @@ pub struct HistoryArgs {
 
     #[arg(long)]
     pub page: Option<String>,
+
+    /// When set, also fetch a summary for changed emails (created/updated) via Email/get.
+    #[arg(long)]
+    pub hydrate: bool,
 }
 
 #[derive(Args, Debug)]

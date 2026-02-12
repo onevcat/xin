@@ -473,6 +473,10 @@ Uses JMAP `Email/changes` to return IDs changed since `sinceState`.
     "created": ["M..."] ,
     "updated": ["M..."],
     "destroyed": ["M..."]
+  },
+  "hydrated": {
+    "created": [ {"emailId":"M...","threadId":"T..."} ],
+    "updated": [ {"emailId":"M...","threadId":"T..."} ]
   }
 }
 ```
@@ -482,7 +486,8 @@ Paging:
 - Continue with: `xin history --page <TOKEN>` (and the same `--max`).
 
 Notes:
-- `history` returns **IDs only** (it does not explain what fields changed). Use `xin get` to hydrate.
+- Default: `history` returns **IDs only** (it does not explain what fields changed). Use `xin get` to hydrate.
+- With `--hydrate`, `history` additionally includes a `hydrated` object containing per-email summary items for `created` and `updated` ids.
 
 ---
 

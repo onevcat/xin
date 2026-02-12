@@ -897,6 +897,209 @@ impl Backend {
             })
     }
 
+    pub async fn email_changes_hydrate(
+        &self,
+        since_state: &str,
+        max_changes: Option<usize>,
+    ) -> Result<(
+        jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>,
+        Vec<Email>,
+        Vec<Email>,
+    ), XinErrorOut> {
+        let client = self.j.client();
+        let session = client.session();
+        let api_url = session.api_url().to_string();
+        let account_id = client.default_account_id().to_string();
+
+        let mut changes_args = json!({
+            "accountId": account_id,
+            "sinceState": since_state
+        });
+        if let Some(m) = max_changes {
+            changes_args
+                .as_object_mut()
+                .expect("changes args")
+                .insert("maxChanges".to_string(), json!(m));
+        }
+
+        let props = json!([
+            "id",
+            "threadId",
+            "receivedAt",
+            "subject",
+            "from",
+            "to",
+            "preview",
+            "hasAttachment",
+            "mailboxIds",
+            "keywords"
+        ]);
+
+        let get_created_args = json!({
+            "accountId": client.default_account_id(),
+            "#ids": {
+                "resultOf": "c0",
+                "name": "Email/changes",
+                "path": "/created"
+            },
+            "properties": props
+        });
+
+        let get_updated_args = json!({
+            "accountId": client.default_account_id(),
+            "#ids": {
+                "resultOf": "c0",
+                "name": "Email/changes",
+                "path": "/updated"
+            },
+            "properties": props
+        });
+
+        let request_body = json!({
+            "using": [
+                "urn:ietf:params:jmap:core",
+                "urn:ietf:params:jmap:mail"
+            ],
+            "methodCalls": [
+                ["Email/changes", changes_args, "c0"],
+                ["Email/get", get_created_args, "g1"],
+                ["Email/get", get_updated_args, "g2"]
+            ]
+        });
+
+        let http = reqwest::Client::builder()
+            .timeout(client.timeout())
+            .default_headers(client.headers().clone())
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("failed to build http client: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        let resp = http
+            .post(api_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("request failed: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("server returned {status}: {text}"),
+                http: Some(json!({"status": status.as_u16()})),
+                jmap: None,
+            });
+        }
+
+        let v: Value = resp.json().await.map_err(|e| XinErrorOut {
+            kind: "httpError".to_string(),
+            message: format!("invalid json response: {e}"),
+            http: None,
+            jmap: None,
+        })?;
+
+        let mrs = v
+            .get("methodResponses")
+            .and_then(|x| x.as_array())
+            .ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "missing methodResponses".to_string(),
+                http: None,
+                jmap: None,
+            })?;
+
+        let mut changes: Option<jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>> = None;
+        let mut created_get: Option<jmap_client::core::response::EmailGetResponse> = None;
+        let mut updated_get: Option<jmap_client::core::response::EmailGetResponse> = None;
+        let mut jmap_error: Option<Value> = None;
+
+        for mr in mrs {
+            let arr = mr.as_array().ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "invalid methodResponses entry".to_string(),
+                http: None,
+                jmap: None,
+            })?;
+            if arr.len() < 2 {
+                continue;
+            }
+            let name = arr[0].as_str().unwrap_or("");
+            if name == "error" {
+                jmap_error = Some(arr[1].clone());
+                continue;
+            }
+
+            // We keyed these via distinct call ids; use that for disambiguation.
+            let call_id = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
+
+            if name == "Email/changes" {
+                changes = serde_json::from_value(arr[1].clone()).ok();
+            } else if name == "Email/get" {
+                if call_id == "g1" {
+                    created_get = serde_json::from_value(arr[1].clone()).ok();
+                } else if call_id == "g2" {
+                    updated_get = serde_json::from_value(arr[1].clone()).ok();
+                }
+            }
+        }
+
+        if let Some(err) = jmap_error {
+            let ty = err
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let desc = err
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let msg = if desc.is_empty() {
+                format!("JMAP error: {ty}")
+            } else {
+                format!("JMAP error: {ty}: {desc}")
+            };
+            return Err(XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: msg,
+                http: None,
+                jmap: Some(err),
+            });
+        }
+
+        let changes = changes.ok_or_else(|| XinErrorOut {
+            kind: "jmapRequestError".to_string(),
+            message: "missing Email/changes response".to_string(),
+            http: None,
+            jmap: None,
+        })?;
+
+        let mut created_get = created_get.ok_or_else(|| XinErrorOut {
+            kind: "jmapRequestError".to_string(),
+            message: "missing Email/get(created) response".to_string(),
+            http: None,
+            jmap: None,
+        })?;
+
+        let mut updated_get = updated_get.ok_or_else(|| XinErrorOut {
+            kind: "jmapRequestError".to_string(),
+            message: "missing Email/get(updated) response".to_string(),
+            http: None,
+            jmap: None,
+        })?;
+
+        Ok((changes, created_get.take_list(), updated_get.take_list()))
+    }
+
     pub async fn destroy_emails(&self, email_ids: &[String]) -> Result<(), XinErrorOut> {
         let mut request = self.j.client().build();
         request

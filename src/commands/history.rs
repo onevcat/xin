@@ -5,6 +5,7 @@ use crate::backend::Backend;
 use crate::cli::HistoryArgs;
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
+use crate::schema;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 struct PageToken {
@@ -106,9 +107,16 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
         );
     }
 
-    let mut resp = match backend.email_changes(&since_state, Some(used_max)).await {
-        Ok(r) => r,
-        Err(e) => return Envelope::err(command_name, account, e),
+    let (mut resp, hydrated_created, hydrated_updated) = if args.hydrate {
+        match backend.email_changes_hydrate(&since_state, Some(used_max)).await {
+            Ok((r, created, updated)) => (r, Some(created), Some(updated)),
+            Err(e) => return Envelope::err(command_name, account, e),
+        }
+    } else {
+        match backend.email_changes(&since_state, Some(used_max)).await {
+            Ok(r) => (r, None, None),
+            Err(e) => return Envelope::err(command_name, account, e),
+        }
     };
 
     let has_more = resp.has_more_changes();
@@ -128,19 +136,26 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
         }));
     }
 
-    Envelope::ok(
-        command_name,
-        account,
-        json!({
-            "sinceState": since_state,
-            "newState": new_state,
-            "hasMoreChanges": has_more,
-            "changes": {
-                "created": created,
-                "updated": updated,
-                "destroyed": destroyed
-            }
-        }),
-        meta,
-    )
+    let mut data = json!({
+        "sinceState": since_state,
+        "newState": new_state,
+        "hasMoreChanges": has_more,
+        "changes": {
+            "created": created,
+            "updated": updated,
+            "destroyed": destroyed
+        }
+    });
+
+    if let (Some(created_emails), Some(updated_emails)) = (hydrated_created, hydrated_updated) {
+        data.as_object_mut().expect("data object").insert(
+            "hydrated".to_string(),
+            json!({
+                "created": schema::email_summary_items(&created_emails),
+                "updated": schema::email_summary_items(&updated_emails)
+            }),
+        );
+    }
+
+    Envelope::ok(command_name, account, data, meta)
 }

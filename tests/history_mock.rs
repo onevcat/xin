@@ -417,6 +417,131 @@ async fn history_page_token_is_source_of_truth_when_max_not_specified() {
 }
 
 #[tokio::test]
+async fn history_hydrate_fetches_created_and_updated_summaries_in_one_request() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let jmap_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S0",
+                "newState": "S1",
+                "hasMoreChanges": false,
+                "created": ["m1"],
+                "updated": ["m2"],
+                "destroyed": ["m3"]
+            }, "c0"],
+            ["Email/get", {
+                "accountId": "A",
+                "state": "S1",
+                "list": [
+                    {
+                        "id": "m1",
+                        "threadId": "t1",
+                        "receivedAt": "2026-02-08T00:00:00Z",
+                        "subject": "Created",
+                        "from": [{"name": "Alice", "email": "alice@example.com"}],
+                        "to": [{"name": null, "email": "me@example.com"}],
+                        "preview": "p1",
+                        "hasAttachment": false,
+                        "mailboxIds": {"inbox": true},
+                        "keywords": {"$seen": true}
+                    }
+                ],
+                "notFound": []
+            }, "g1"],
+            ["Email/get", {
+                "accountId": "A",
+                "state": "S1",
+                "list": [
+                    {
+                        "id": "m2",
+                        "threadId": "t2",
+                        "receivedAt": "2026-02-08T00:00:01Z",
+                        "subject": "Updated",
+                        "from": [{"name": "Bob", "email": "bob@example.com"}],
+                        "to": [{"name": null, "email": "me@example.com"}],
+                        "preview": "p2",
+                        "hasAttachment": true,
+                        "mailboxIds": {"inbox": true},
+                        "keywords": {}
+                    }
+                ],
+                "notFound": []
+            }, "g2"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("\"Email/changes\""))
+        .and(body_string_contains("\"Email/get\""))
+        .and(body_string_contains("\"#ids\""))
+        .and(body_string_contains("\"path\":\"/created\""))
+        .and(body_string_contains("\"path\":\"/updated\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(jmap_response))
+        .mount(&server)
+        .await;
+
+    let out = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--since", "S0", "--max", "100", "--hydrate"])
+        .output()
+        .expect("run");
+
+    assert!(
+        out.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    assert_eq!(v.pointer("/ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        v.pointer("/data/changes/created/0")
+            .and_then(|v| v.as_str()),
+        Some("m1")
+    );
+    assert_eq!(
+        v.pointer("/data/changes/updated/0")
+            .and_then(|v| v.as_str()),
+        Some("m2")
+    );
+    assert_eq!(
+        v.pointer("/data/changes/destroyed/0")
+            .and_then(|v| v.as_str()),
+        Some("m3")
+    );
+
+    // Hydrated summaries present.
+    assert_eq!(
+        v.pointer("/data/hydrated/created/0/emailId")
+            .and_then(|v| v.as_str()),
+        Some("m1")
+    );
+    assert_eq!(
+        v.pointer("/data/hydrated/updated/0/emailId")
+            .and_then(|v| v.as_str()),
+        Some("m2")
+    );
+
+    // Ensure only one POST occurred.
+    let requests = server.received_requests().await.expect("requests");
+    let posts = requests.iter().filter(|r| r.method.as_str() == "POST").count();
+    assert_eq!(posts, 1);
+}
+
+#[tokio::test]
 async fn history_page_token_max_mismatch_is_usage_error_and_does_not_hit_changes_endpoint() {
     let server = MockServer::start().await;
 
