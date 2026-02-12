@@ -46,7 +46,7 @@ fn mock_session(server: &MockServer) -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn labels_get_by_id_uses_mailbox_get_ids() {
+async fn messages_search_forces_collapse_threads_false_and_emits_search_shape() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -55,42 +55,50 @@ async fn labels_get_by_id_uses_mailbox_get_ids() {
         .mount(&server)
         .await;
 
-    let mailbox_get_response = json!({
+    let jmap_response = json!({
         "sessionState": "s",
         "methodResponses": [
-            ["Mailbox/get", {
+            ["Email/query", {
+                "accountId": "A",
+                "queryState": "s",
+                "canCalculateChanges": false,
+                "position": 0,
+                "ids": ["m1"],
+                "total": 1
+            }, "q0"],
+            ["Email/get", {
                 "accountId": "A",
                 "state": "s",
                 "list": [{
-                    "id": "mb1",
-                    "name": "Inbox",
-                    "role": "inbox",
-                    "parentId": null,
-                    "sortOrder": 0,
-                    "totalEmails": 1,
-                    "unreadEmails": 1,
-                    "totalThreads": 1,
-                    "unreadThreads": 1,
-                    "isSubscribed": true
+                    "id": "m1",
+                    "threadId": "t1",
+                    "receivedAt": "2026-02-08T00:00:00Z",
+                    "subject": "Hi",
+                    "from": [{"name": "Alice", "email": "alice@example.com"}],
+                    "to": [{"name": null, "email": "me@example.com"}],
+                    "preview": "preview",
+                    "hasAttachment": false,
+                    "mailboxIds": {"inbox": true},
+                    "keywords": {"$seen": true}
                 }],
                 "notFound": []
-            }, "m0"]
+            }, "g0"]
         ]
     });
 
-    // Ensure ids:["mb1"] was used.
+    // Ensure messages.search uses collapseThreads=false.
     Mock::given(method("POST"))
         .and(path("/jmap"))
-        .and(body_string_contains("Mailbox/get"))
-        .and(body_string_contains("\"ids\":[\"mb1\"]"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_get_response))
+        .and(body_string_contains("\"Email/query\""))
+        .and(body_string_contains("\"collapseThreads\":false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(jmap_response))
         .mount(&server)
         .await;
 
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["labels", "get", "mb1"])
+        .args(["messages", "search", "--max", "10", "--filter-json", "{}"])
         .output()
         .expect("run");
 
@@ -104,15 +112,16 @@ async fn labels_get_by_id_uses_mailbox_get_ids() {
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(
-        v.get("command").and_then(|v| v.as_str()),
-        Some("labels.get")
-    );
-    assert_eq!(
-        v.get("data")
-            .and_then(|d| d.get("mailbox"))
-            .and_then(|m| m.get("id"))
-            .and_then(|v| v.as_str()),
-        Some("mb1")
-    );
+    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("messages.search"));
+
+    let items = v
+        .get("data")
+        .and_then(|d| d.get("items"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].get("emailId").and_then(|v| v.as_str()), Some("m1"));
+    assert_eq!(items[0].get("threadId").and_then(|v| v.as_str()), Some("t1"));
+    assert_eq!(items[0].get("unread").and_then(|v| v.as_bool()), Some(false));
 }

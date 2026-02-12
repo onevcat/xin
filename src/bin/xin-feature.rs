@@ -507,15 +507,26 @@ fn run_step_once(
 
 fn assert_one(v: &serde_json::Value, a: &Assertion, ctx: &Context) -> Result<(), String> {
     let path = substitute(&a.path, ctx)?;
-    let got = v
-        .pointer(&path)
-        .ok_or_else(|| format!("missing pointer {}", path))?;
+    let got_opt = v.pointer(&path);
 
-    if a.exists.unwrap_or(false) {
-        if got.is_null() {
-            return Err("value is null".to_string());
+    // Handle exists assertion first (before requiring path to exist)
+    if let Some(exists) = a.exists {
+        let path_exists = got_opt.is_some() && !got_opt.unwrap().is_null();
+        if exists != path_exists {
+            if exists {
+                return Err(format!("expected path to exist, but it does not or is null"));
+            } else {
+                return Err(format!("expected path to not exist, but found: {:?}", got_opt.unwrap()));
+            }
+        }
+        // exists assertion passed; if no other assertions, we're done
+        if a.equals.is_none() && a.contains.is_none() {
+            return Ok(());
         }
     }
+
+    // For other assertions, path must exist
+    let got = got_opt.ok_or_else(|| format!("missing pointer {}", path))?;
 
     if let Some(eq) = &a.equals {
         // Allow variable substitution for string equals values.

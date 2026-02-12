@@ -1,5 +1,7 @@
 use assert_cmd::Command;
 use serde_json::json;
+use std::io::Write;
+use tempfile::NamedTempFile;
 use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -46,7 +48,7 @@ fn mock_session(server: &MockServer) -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn labels_get_by_id_uses_mailbox_get_ids() {
+async fn search_filter_json_can_be_loaded_from_file_via_at_syntax() {
     let server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -55,42 +57,55 @@ async fn labels_get_by_id_uses_mailbox_get_ids() {
         .mount(&server)
         .await;
 
-    let mailbox_get_response = json!({
+    let mut f = NamedTempFile::new().expect("tmpfile");
+    write!(f, "{{\"from\":\"alice\"}}").expect("write file");
+
+    let jmap_response = json!({
         "sessionState": "s",
         "methodResponses": [
-            ["Mailbox/get", {
+            ["Email/query", {
+                "accountId": "A",
+                "queryState": "s",
+                "canCalculateChanges": false,
+                "position": 0,
+                "ids": ["m1"],
+                "total": 1
+            }, "q0"],
+            ["Email/get", {
                 "accountId": "A",
                 "state": "s",
                 "list": [{
-                    "id": "mb1",
-                    "name": "Inbox",
-                    "role": "inbox",
-                    "parentId": null,
-                    "sortOrder": 0,
-                    "totalEmails": 1,
-                    "unreadEmails": 1,
-                    "totalThreads": 1,
-                    "unreadThreads": 1,
-                    "isSubscribed": true
+                    "id": "m1",
+                    "threadId": "t1",
+                    "receivedAt": "2026-02-08T00:00:00Z",
+                    "subject": "Hi",
+                    "from": [{"name": "Alice", "email": "alice@example.com"}],
+                    "to": [{"name": null, "email": "me@example.com"}],
+                    "preview": "preview",
+                    "hasAttachment": false,
+                    "mailboxIds": {"inbox": true},
+                    "keywords": {"$seen": true}
                 }],
                 "notFound": []
-            }, "m0"]
+            }, "g0"]
         ]
     });
 
-    // Ensure ids:["mb1"] was used.
+    // Ensure the file-backed filter makes it into the request.
     Mock::given(method("POST"))
         .and(path("/jmap"))
-        .and(body_string_contains("Mailbox/get"))
-        .and(body_string_contains("\"ids\":[\"mb1\"]"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_get_response))
+        .and(body_string_contains("\"Email/query\""))
+        .and(body_string_contains("\"from\":\"alice\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(jmap_response))
         .mount(&server)
         .await;
+
+    let arg = format!("@{}", f.path().display());
 
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["labels", "get", "mb1"])
+        .args(["search", "--max", "10", "--filter-json", &arg])
         .output()
         .expect("run");
 
@@ -104,15 +119,4 @@ async fn labels_get_by_id_uses_mailbox_get_ids() {
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(
-        v.get("command").and_then(|v| v.as_str()),
-        Some("labels.get")
-    );
-    assert_eq!(
-        v.get("data")
-            .and_then(|d| d.get("mailbox"))
-            .and_then(|m| m.get("id"))
-            .and_then(|v| v.as_str()),
-        Some("mb1")
-    );
 }

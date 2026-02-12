@@ -415,10 +415,16 @@ All `xin drafts ...` commands use the same envelope; their `data` shapes are:
 { "draft": { "emailId": "M...", "threadId": "T..." }, "submission": { "id": "S...", "sendAt": null } }
 ```
 
-- `drafts update`:
+- `drafts update` (metadata-only):
 
 ```json
-{ "draft": { "emailId": "M...", "threadId": "T..." }, "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ] }
+{ "draft": { "emailId": "M...", "threadId": "T..." } }
+```
+
+- `drafts rewrite` (content; id may change):
+
+```json
+{ "draft": { "emailId": "M...", "threadId": "T..." }, "uploaded": [ { "blobId": "B...", "type": "...", "size": 123 } ], "replacedFrom": "M..." }
 ```
 
 - `drafts delete` (remove from Drafts mailbox; non-destructive):

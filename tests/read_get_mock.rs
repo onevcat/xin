@@ -191,14 +191,23 @@ async fn get_metadata_headers_dict_works_against_mock_jmap() {
         .and_then(|e| e.get("headers"))
         .expect("headers dict");
 
-    assert_eq!(headers.get("message-id").and_then(|x| x.as_str()), Some("<m1@example.com>"));
+    assert_eq!(
+        headers.get("message-id").and_then(|x| x.as_str()),
+        Some("<m1@example.com>")
+    );
     assert_eq!(
         headers.get("date").and_then(|x| x.as_str()),
         Some("2026-02-08T00:00:00+00:00")
     );
     assert_eq!(
-        headers.get("received").and_then(|x| x.as_array()).map(|a| a.len()),
+        headers
+            .get("received")
+            .and_then(|x| x.as_array())
+            .map(|a| a.len()),
         Some(2)
     );
-    assert_eq!(headers.get("x-custom").and_then(|x| x.as_str()), Some("hello"));
+    assert_eq!(
+        headers.get("x-custom").and_then(|x| x.as_str()),
+        Some("hello")
+    );
 }

@@ -136,7 +136,10 @@ async fn inbox_next_compiles_to_in_inbox_and_unread_filter() {
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("inbox.next"));
+    assert_eq!(
+        v.get("command").and_then(|v| v.as_str()),
+        Some("inbox.next")
+    );
 
     assert!(
         v.pointer("/data/item").is_some(),

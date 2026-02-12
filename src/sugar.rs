@@ -27,7 +27,9 @@ pub async fn compile_search_filter(query: &str, backend: &Backend) -> Result<Val
     // Only fetch mailboxes if we see any in:<...> term.
     let needs_mailboxes = tokens.iter().any(|t| match t {
         Token::Term { key: Some(k), .. } => k == "in",
-        Token::OrGroup(terms) => terms.iter().any(|tt| matches!(tt.key.as_deref(), Some("in"))),
+        Token::OrGroup(terms) => terms
+            .iter()
+            .any(|tt| matches!(tt.key.as_deref(), Some("in"))),
         _ => false,
     });
 
@@ -41,7 +43,11 @@ pub async fn compile_search_filter(query: &str, backend: &Backend) -> Result<Val
 
     for t in tokens {
         match t {
-            Token::Term { negated, key, value } => {
+            Token::Term {
+                negated,
+                key,
+                value,
+            } => {
                 let cond = compile_one_term(&key, &value, mailboxes.as_deref())?;
                 compiled.push(if negated { not(cond) } else { cond });
             }
@@ -61,7 +67,11 @@ pub async fn compile_search_filter(query: &str, backend: &Backend) -> Result<Val
 
 #[derive(Debug, Clone)]
 enum Token {
-    Term { negated: bool, key: Option<String>, value: String },
+    Term {
+        negated: bool,
+        key: Option<String>,
+        value: String,
+    },
     OrGroup(Vec<TermToken>),
 }
 
@@ -101,7 +111,11 @@ fn lex_tokens(input: &str) -> Result<Vec<Token>, XinErrorOut> {
             let mut terms: Vec<TermToken> = Vec::new();
             for p in parts {
                 let (negated, key, value) = parse_simple_term(&p)?;
-                terms.push(TermToken { negated, key, value });
+                terms.push(TermToken {
+                    negated,
+                    key,
+                    value,
+                });
             }
             if terms.is_empty() {
                 return Err(XinErrorOut::usage("or:(...) group is empty".to_string()));
@@ -111,7 +125,11 @@ fn lex_tokens(input: &str) -> Result<Vec<Token>, XinErrorOut> {
         }
 
         let (negated, key, value) = parse_simple_term(&tok)?;
-        out.push(Token::Term { negated, key, value });
+        out.push(Token::Term {
+            negated,
+            key,
+            value,
+        });
     }
 
     Ok(out)
@@ -153,10 +171,7 @@ fn parse_simple_term(token: &str) -> Result<(bool, Option<String>, String), XinE
 }
 
 fn unquote(s: &str) -> String {
-    if let Some(inner) = s
-        .strip_prefix('"')
-        .and_then(|x| x.strip_suffix('"'))
-    {
+    if let Some(inner) = s.strip_prefix('"').and_then(|x| x.strip_suffix('"')) {
         inner.to_string()
     } else {
         s.to_string()
@@ -219,7 +234,9 @@ fn split_or_terms(inner: &str) -> Result<Vec<String>, XinErrorOut> {
     }
 
     if in_quotes {
-        return Err(XinErrorOut::usage("unterminated quote in or:(...)".to_string()));
+        return Err(XinErrorOut::usage(
+            "unterminated quote in or:(...)".to_string(),
+        ));
     }
 
     let s = cur.trim();
@@ -251,9 +268,8 @@ fn compile_one_term(
                     "in:<mailbox> requires mailbox listing (internal error)".to_string(),
                 ));
             };
-            let id = resolve_mailbox_id(value, mbxs).ok_or_else(|| {
-                XinErrorOut::usage(format!("unknown mailbox: {value}"))
-            })?;
+            let id = resolve_mailbox_id(value, mbxs)
+                .ok_or_else(|| XinErrorOut::usage(format!("unknown mailbox: {value}")))?;
             Ok(json!({"inMailbox": id }))
         }
 
@@ -298,10 +314,10 @@ fn parse_bool(value: &str, label: &str) -> Result<bool, XinErrorOut> {
 fn parse_date(value: &str, label: &str) -> Result<String, XinErrorOut> {
     // v0: accept YYYY-MM-DD (interpreted as 00:00:00Z) or RFC3339.
     if let Ok(d) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
-        let dt = Utc
-            .from_utc_datetime(&d.and_hms_opt(0, 0, 0).ok_or_else(|| {
-                XinErrorOut::usage(format!("invalid date for {label}"))
-            })?);
+        let dt = Utc.from_utc_datetime(
+            &d.and_hms_opt(0, 0, 0)
+                .ok_or_else(|| XinErrorOut::usage(format!("invalid date for {label}")))?,
+        );
         return Ok(dt.to_rfc3339());
     }
 
@@ -310,10 +326,7 @@ fn parse_date(value: &str, label: &str) -> Result<String, XinErrorOut> {
         .map_err(|e| XinErrorOut::usage(format!("invalid {label} date: {e}")))
 }
 
-fn resolve_mailbox_id(
-    s: &str,
-    mailboxes: &[jmap_client::mailbox::Mailbox],
-) -> Option<String> {
+fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> Option<String> {
     let needle = s.trim();
     if needle.is_empty() {
         return None;

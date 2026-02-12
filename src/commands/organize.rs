@@ -27,10 +27,7 @@ impl ChangeSummary {
 
 // ModifyPlan is defined in backend.rs
 
-fn resolve_mailbox_id(
-    s: &str,
-    mailboxes: &[jmap_client::mailbox::Mailbox],
-) -> Option<String> {
+fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> Option<String> {
     let needle = s.trim();
     if needle.is_empty() {
         return None;
@@ -160,9 +157,7 @@ async fn apply_plan_to_emails(
         return Ok(());
     }
 
-    backend
-        .modify_emails(email_ids, plan)
-        .await
+    backend.modify_emails(email_ids, plan).await
 }
 
 pub async fn batch_modify(
@@ -427,7 +422,16 @@ pub async fn thread_archive(
         summary.added_mailboxes.push(aid);
     }
 
-    thread_sugar(&backend, command_name, account, &args.thread_id, plan, summary, dry_run).await
+    thread_sugar(
+        &backend,
+        command_name,
+        account,
+        &args.thread_id,
+        plan,
+        summary,
+        dry_run,
+    )
+    .await
 }
 
 pub async fn thread_read(
@@ -447,7 +451,16 @@ pub async fn thread_read(
     let mut summary = ChangeSummary::default();
     summary.added_keywords.push("$seen".to_string());
 
-    thread_sugar(&backend, command_name, account, &args.thread_id, plan, summary, dry_run).await
+    thread_sugar(
+        &backend,
+        command_name,
+        account,
+        &args.thread_id,
+        plan,
+        summary,
+        dry_run,
+    )
+    .await
 }
 
 pub async fn thread_unread(
@@ -467,10 +480,23 @@ pub async fn thread_unread(
     let mut summary = ChangeSummary::default();
     summary.removed_keywords.push("$seen".to_string());
 
-    thread_sugar(&backend, command_name, account, &args.thread_id, plan, summary, dry_run).await
+    thread_sugar(
+        &backend,
+        command_name,
+        account,
+        &args.thread_id,
+        plan,
+        summary,
+        dry_run,
+    )
+    .await
 }
 
-pub async fn thread_trash(account: Option<String>, args: &ThreadTrashArgs, dry_run: bool) -> Envelope<Value> {
+pub async fn thread_trash(
+    account: Option<String>,
+    args: &ThreadTrashArgs,
+    dry_run: bool,
+) -> Envelope<Value> {
     let command_name = "thread.trash";
 
     let backend = match Backend::connect().await {
@@ -497,7 +523,16 @@ pub async fn thread_trash(account: Option<String>, args: &ThreadTrashArgs, dry_r
     let mut summary = ChangeSummary::default();
     summary.added_mailboxes.push(trash_id);
 
-    thread_sugar(&backend, command_name, account, &args.thread_id, plan, summary, dry_run).await
+    thread_sugar(
+        &backend,
+        command_name,
+        account,
+        &args.thread_id,
+        plan,
+        summary,
+        dry_run,
+    )
+    .await
 }
 
 pub async fn thread_delete(
@@ -566,7 +601,11 @@ pub async fn thread_delete(
     )
 }
 
-pub async fn archive(account: Option<String>, args: &ArchiveArgs, dry_run: bool) -> Envelope<Value> {
+pub async fn archive(
+    account: Option<String>,
+    args: &ArchiveArgs,
+    dry_run: bool,
+) -> Envelope<Value> {
     let command_name = "archive";
 
     if args.whole_thread && args.email_ids.len() != 1 {
@@ -638,8 +677,16 @@ pub async fn archive(account: Option<String>, args: &ArchiveArgs, dry_run: bool)
             Err(e) => return Envelope::err(command_name, account, e),
         };
 
-        return thread_sugar(&backend, command_name, account, &thread_id, plan, summary, dry_run)
-            .await;
+        return thread_sugar(
+            &backend,
+            command_name,
+            account,
+            &thread_id,
+            plan,
+            summary,
+            dry_run,
+        )
+        .await;
     }
 
     if let Err(e) = apply_plan_to_emails(&backend, &args.email_ids, &plan, dry_run).await {
@@ -708,8 +755,16 @@ pub async fn read(account: Option<String>, args: &ReadArgs, dry_run: bool) -> En
             Err(e) => return Envelope::err(command_name, account, e),
         };
 
-        return thread_sugar(&backend, command_name, account, &thread_id, plan, summary, dry_run)
-            .await;
+        return thread_sugar(
+            &backend,
+            command_name,
+            account,
+            &thread_id,
+            plan,
+            summary,
+            dry_run,
+        )
+        .await;
     }
 
     if let Err(e) = apply_plan_to_emails(&backend, &args.email_ids, &plan, dry_run).await {
@@ -778,8 +833,16 @@ pub async fn unread(account: Option<String>, args: &UnreadArgs, dry_run: bool) -
             Err(e) => return Envelope::err(command_name, account, e),
         };
 
-        return thread_sugar(&backend, command_name, account, &thread_id, plan, summary, dry_run)
-            .await;
+        return thread_sugar(
+            &backend,
+            command_name,
+            account,
+            &thread_id,
+            plan,
+            summary,
+            dry_run,
+        )
+        .await;
     }
 
     if let Err(e) = apply_plan_to_emails(&backend, &args.email_ids, &plan, dry_run).await {
@@ -864,8 +927,16 @@ pub async fn trash(account: Option<String>, args: &TrashArgs, dry_run: bool) -> 
             Err(e) => return Envelope::err(command_name, account, e),
         };
 
-        return thread_sugar(&backend, command_name, account, &thread_id, plan, summary, dry_run)
-            .await;
+        return thread_sugar(
+            &backend,
+            command_name,
+            account,
+            &thread_id,
+            plan,
+            summary,
+            dry_run,
+        )
+        .await;
     }
 
     if let Err(e) = apply_plan_to_emails(&backend, &args.email_ids, &plan, dry_run).await {

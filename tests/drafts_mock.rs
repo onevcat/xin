@@ -293,11 +293,90 @@ async fn drafts_create_works_against_mock_jmap() {
 }
 
 #[tokio::test]
-async fn drafts_update_subject_works_against_mock_jmap() {
+async fn drafts_rewrite_subject_works_against_mock_jmap() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
-    let update_response = json!({
+    // Existing draft (full) to preserve fields.
+    let full_get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "m1",
+                    "threadId": "t1",
+                    "subject": "Old",
+                    "from": [{"name": "Me", "email": "me@example.com"}],
+                    "to": [{"name": null, "email": "you@example.com"}],
+                    "bodyStructure": {"type": "text/plain", "partId": "text"},
+                    "bodyValues": {"text": {"value": "old"}},
+                    "attachments": []
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .and(body_string_contains("bodyStructure"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(full_get_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let create_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {
+                    "c0": { "id": "m2", "threadId": "t2" }
+                }
+            }, "e0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
+        .and(body_string_contains("\"subject\":\"Updated\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(create_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remove_response = json!({
         "sessionState": "s",
         "methodResponses": [
             ["Email/set", {
@@ -313,37 +392,16 @@ async fn drafts_update_subject_works_against_mock_jmap() {
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
         .and(body_string_contains("\"update\""))
-        .and(body_string_contains("\"subject\":\"Updated\""))
-        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
-        .mount(&server)
-        .await;
-
-    let get_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["Email/get", {
-                "accountId": "A",
-                "state": "s",
-                "list": [{
-                    "id": "m1",
-                    "threadId": "t1"
-                }],
-                "notFound": []
-            }, "g0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("Email/get"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(get_response))
+        // update request removes Drafts mailbox membership
+        .respond_with(ResponseTemplate::new(200).set_body_json(remove_response))
+        .expect(1)
         .mount(&server)
         .await;
 
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["drafts", "update", "m1", "--subject", "Updated"])
+        .args(["drafts", "rewrite", "m1", "--subject", "Updated"])
         .output()
         .expect("run");
 
@@ -355,12 +413,18 @@ async fn drafts_update_subject_works_against_mock_jmap() {
             .and_then(|d| d.get("draft"))
             .and_then(|e| e.get("emailId"))
             .and_then(|x| x.as_str()),
+        Some("m2")
+    );
+    assert_eq!(
+        v.get("data")
+            .and_then(|d| d.get("replacedFrom"))
+            .and_then(|x| x.as_str()),
         Some("m1")
     );
 }
 
 #[tokio::test]
-async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
+async fn drafts_rewrite_keeps_existing_attachments_and_appends_new_ones() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -374,6 +438,8 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
                 "list": [{
                     "id": "m1",
                     "threadId": "t1",
+                    "from": [{"name": "Me", "email": "me@example.com"}],
+                    "to": [{"name": null, "email": "you@example.com"}],
                     "bodyStructure": {
                         "type": "multipart/mixed",
                         "subParts": [
@@ -414,8 +480,58 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
         .mount(&server)
         .await;
 
-    // 3) Email/set(update) must include both old + new attachment blobIds.
-    let update_response = json!({
+    // 3) Mailbox/get to resolve Drafts mailbox id.
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // 4) Email/set(create) must include both old + new attachment blobIds.
+    let create_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {"c0": {"id": "m2", "threadId": "t2"}}
+            }, "e0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
+        .and(body_string_contains("\"blobId\":\"b_old\""))
+        .and(body_string_contains("\"blobId\":\"b_new\""))
+        .and(body_string_contains("\"disposition\":\"attachment\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(create_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // 5) Email/set(destroy) old draft.
+    let destroy_response = json!({
         "sessionState": "s",
         "methodResponses": [
             ["Email/set", {
@@ -423,7 +539,7 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
                 "oldState": "s",
                 "newState": "s",
                 "updated": {"m1": null}
-            }, "u0"]
+            }, "d0"]
         ]
     });
 
@@ -431,10 +547,8 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
         .and(body_string_contains("\"update\""))
-        .and(body_string_contains("\"blobId\":\"b_old\""))
-        .and(body_string_contains("\"blobId\":\"b_new\""))
-        .and(body_string_contains("\"disposition\":\"attachment\""))
-        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
+        .and(body_string_contains("m1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(destroy_response))
         .expect(1)
         .mount(&server)
         .await;
@@ -460,7 +574,8 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
         .and(body_string_contains("Email/get"))
         .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
         .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
-        .expect(1)
+        // rewrite no longer does a post-create Email/get; keep this mock as a guardrail.
+        .expect(0)
         .mount(&server)
         .await;
 
@@ -472,15 +587,29 @@ async fn drafts_update_keeps_existing_attachments_and_appends_new_ones() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["drafts", "update", "m1", "--attach", p.to_str().unwrap()])
+        .args(["drafts", "rewrite", "m1", "--attach", p.to_str().unwrap()])
         .output()
         .expect("run");
+
+    if !output.status.success() {
+        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+        let requests = server.received_requests().await.expect("requests");
+        for r in &requests {
+            eprintln!(
+                "request: {} {}\n{}",
+                r.method,
+                r.url,
+                String::from_utf8_lossy(&r.body)
+            );
+        }
+    }
 
     assert!(output.status.success());
 }
 
 #[tokio::test]
-async fn drafts_update_replace_attachments_drops_existing() {
+async fn drafts_rewrite_replace_attachments_drops_existing() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -494,6 +623,8 @@ async fn drafts_update_replace_attachments_drops_existing() {
                 "list": [{
                     "id": "m1",
                     "threadId": "t1",
+                    "from": [{"name": "Me", "email": "me@example.com"}],
+                    "to": [{"name": null, "email": "you@example.com"}],
                     "bodyStructure": {
                         "type": "multipart/mixed",
                         "subParts": [
@@ -534,17 +665,65 @@ async fn drafts_update_replace_attachments_drops_existing() {
         .mount(&server)
         .await;
 
-    // Guardrail: update must NOT include old attachment blobId.
+    // 3) Mailbox/get to resolve Drafts mailbox id.
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Guardrail: create must NOT include old attachment blobId.
     Mock::given(method("POST"))
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
         .and(body_string_contains("\"blobId\":\"b_old\""))
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&server)
         .await;
 
-    let update_response = json!({
+    let create_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {"c0": {"id": "m2", "threadId": "t2"}}
+            }, "e0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
+        .and(body_string_contains("\"blobId\":\"b_new\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(create_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let destroy_response = json!({
         "sessionState": "s",
         "methodResponses": [
             ["Email/set", {
@@ -552,7 +731,7 @@ async fn drafts_update_replace_attachments_drops_existing() {
                 "oldState": "s",
                 "newState": "s",
                 "updated": {"m1": null}
-            }, "u0"]
+            }, "d0"]
         ]
     });
 
@@ -560,32 +739,8 @@ async fn drafts_update_replace_attachments_drops_existing() {
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
         .and(body_string_contains("\"update\""))
-        .and(body_string_contains("\"blobId\":\"b_new\""))
-        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let get_min_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["Email/get", {
-                "accountId": "A",
-                "state": "s",
-                "list": [{
-                    "id": "m1",
-                    "threadId": "t1"
-                }],
-                "notFound": []
-            }, "g0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("Email/get"))
-        .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
+        .and(body_string_contains("m1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(destroy_response))
         .expect(1)
         .mount(&server)
         .await;
@@ -600,7 +755,7 @@ async fn drafts_update_replace_attachments_drops_existing() {
         .env("XIN_TOKEN", "test-token")
         .args([
             "drafts",
-            "update",
+            "rewrite",
             "m1",
             "--replace-attachments",
             "--attach",
@@ -613,7 +768,7 @@ async fn drafts_update_replace_attachments_drops_existing() {
 }
 
 #[tokio::test]
-async fn drafts_update_clear_attachments_removes_all() {
+async fn drafts_rewrite_clear_attachments_removes_all() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -626,6 +781,8 @@ async fn drafts_update_clear_attachments_removes_all() {
                 "list": [{
                     "id": "m1",
                     "threadId": "t1",
+                    "from": [{"name": "Me", "email": "me@example.com"}],
+                    "to": [{"name": null, "email": "you@example.com"}],
                     "bodyStructure": {
                         "type": "multipart/mixed",
                         "subParts": [
@@ -660,17 +817,65 @@ async fn drafts_update_clear_attachments_removes_all() {
         .mount(&server)
         .await;
 
-    // Guardrail: update must NOT include old attachment blobId.
+    // 3) Mailbox/get to resolve Drafts mailbox id.
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Guardrail: create must NOT include old attachment blobId.
     Mock::given(method("POST"))
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
         .and(body_string_contains("\"blobId\":\"b_old\""))
         .respond_with(ResponseTemplate::new(200))
         .expect(0)
         .mount(&server)
         .await;
 
-    let update_response = json!({
+    let create_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {"c0": {"id": "m2", "threadId": "t2"}}
+            }, "e0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("\"create\""))
+        .and(body_string_contains("text/plain"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(create_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let destroy_response = json!({
         "sessionState": "s",
         "methodResponses": [
             ["Email/set", {
@@ -678,7 +883,7 @@ async fn drafts_update_clear_attachments_removes_all() {
                 "oldState": "s",
                 "newState": "s",
                 "updated": {"m1": null}
-            }, "u0"]
+            }, "d0"]
         ]
     });
 
@@ -686,32 +891,8 @@ async fn drafts_update_clear_attachments_removes_all() {
         .and(path("/jmap"))
         .and(body_string_contains("Email/set"))
         .and(body_string_contains("\"update\""))
-        .and(body_string_contains("text/plain"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(update_response))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let get_min_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["Email/get", {
-                "accountId": "A",
-                "state": "s",
-                "list": [{
-                    "id": "m1",
-                    "threadId": "t1"
-                }],
-                "notFound": []
-            }, "g0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("Email/get"))
-        .and(body_string_contains("\"properties\":[\"id\",\"threadId\"]"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(get_min_response))
+        .and(body_string_contains("m1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(destroy_response))
         .expect(1)
         .mount(&server)
         .await;
@@ -719,7 +900,7 @@ async fn drafts_update_clear_attachments_removes_all() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["drafts", "update", "m1", "--clear-attachments"])
+        .args(["drafts", "rewrite", "m1", "--clear-attachments"])
         .output()
         .expect("run");
 
@@ -727,7 +908,7 @@ async fn drafts_update_clear_attachments_removes_all() {
 }
 
 #[tokio::test]
-async fn drafts_update_replace_attachments_requires_attach() {
+async fn drafts_rewrite_replace_attachments_requires_attach() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -741,7 +922,7 @@ async fn drafts_update_replace_attachments_requires_attach() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["drafts", "update", "m1", "--replace-attachments"])
+        .args(["drafts", "rewrite", "m1", "--replace-attachments"])
         .output()
         .expect("run");
 
@@ -757,7 +938,7 @@ async fn drafts_update_replace_attachments_requires_attach() {
 }
 
 #[tokio::test]
-async fn drafts_update_clear_attachments_cannot_combine_with_attach() {
+async fn drafts_rewrite_clear_attachments_cannot_combine_with_attach() {
     let server = MockServer::start().await;
     mount_session(&server).await;
 
@@ -773,7 +954,7 @@ async fn drafts_update_clear_attachments_cannot_combine_with_attach() {
         .env("XIN_TOKEN", "test-token")
         .args([
             "drafts",
-            "update",
+            "rewrite",
             "m1",
             "--clear-attachments",
             "--attach",
@@ -894,11 +1075,18 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
             ["Mailbox/get", {
                 "accountId": "A",
                 "state": "s",
-                "list": [{
-                    "id": "mb1",
-                    "name": "Drafts",
-                    "role": "drafts"
-                }],
+                "list": [
+                    {
+                        "id": "mb1",
+                        "name": "Drafts",
+                        "role": "drafts"
+                    },
+                    {
+                        "id": "mbTrash",
+                        "name": "Trash",
+                        "role": "trash"
+                    }
+                ],
                 "notFound": []
             }, "m0"]
         ]
@@ -956,6 +1144,14 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
         body_str.contains("mailboxIds/mb1") && body_str.contains("false"),
         "expected mailboxIds/mb1 removal in Email/set: {body_str}"
     );
+    assert!(
+        body_str.contains("mailboxIds/mbTrash") && body_str.contains("true"),
+        "expected mailboxIds/mbTrash add in Email/set: {body_str}"
+    );
+    assert!(
+        body_str.contains("keywords/$draft") && body_str.contains("false"),
+        "expected keywords/$draft removal in Email/set: {body_str}"
+    );
 }
 
 #[tokio::test]
@@ -992,7 +1188,7 @@ async fn drafts_destroy_sends_email_set_destroy_when_forced() {
                 "accountId": "A",
                 "oldState": "s",
                 "newState": "s",
-                "destroyed": ["m1"]
+                "updated": {"m1": null}
             }, "d0"]
         ]
     });
