@@ -544,11 +544,20 @@ fn assert_one(v: &serde_json::Value, a: &Assertion, ctx: &Context) -> Result<(),
 
     if let Some(substr) = &a.contains {
         let substr = substitute(substr, ctx)?;
-        let s = got
-            .as_str()
-            .ok_or_else(|| format!("contains expects string, got {got}"))?;
-        if !s.contains(&substr) {
-            return Err(format!("expected to contain {substr:?}, got {s:?}"));
+
+        if let Some(s) = got.as_str() {
+            if !s.contains(&substr) {
+                return Err(format!("expected to contain {substr:?}, got {s:?}"));
+            }
+        } else if let Some(arr) = got.as_array() {
+            let ok = arr.iter().any(|v| v.as_str() == Some(substr.as_str()));
+            if !ok {
+                return Err(format!(
+                    "expected array to contain element {substr:?}, got {got}"
+                ));
+            }
+        } else {
+            return Err(format!("contains expects string or string[], got {got}"));
         }
     }
 
