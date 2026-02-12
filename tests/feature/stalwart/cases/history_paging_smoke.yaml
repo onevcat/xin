@@ -1,0 +1,96 @@
+id: history_paging_smoke
+it: "history paging uses newState continuation and page token works without re-specifying --max"
+requiresFresh: true
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: bootstrap-history
+    say:
+      - "Given we snapshot current Email state"
+    xin:
+      args:
+        - history
+    expect:
+      - path: /data/newState
+        exists: true
+    save:
+      state0: /data/newState
+
+  - name: send-a
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history paging a"
+        - --text
+        - "hello a"
+
+  - name: send-b
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history paging b"
+        - --text
+        - "hello b"
+
+  - name: send-c
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history paging c"
+        - --text
+        - "hello c"
+
+  - name: history-page-1
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - history
+        - --since
+        - ${state0}
+        - --max
+        - "1"
+    expect:
+      - path: /data/hasMoreChanges
+        equals: true
+      - path: /meta/nextPage
+        exists: true
+      - path: /data/newState
+        exists: true
+    save:
+      page1: /meta/nextPage
+      state1: /data/newState
+
+  - name: history-page-2-using-token-only
+    say:
+      - "When we continue with --page only (no --max), token should be source of truth"
+    xin:
+      args:
+        - history
+        - --page
+        - ${page1}
+    expect:
+      - path: /data/sinceState
+        equals: ${state1}
+      - path: /data/newState
+        exists: true

@@ -1,0 +1,73 @@
+id: history_hydrate_smoke
+it: "history --hydrate returns summaries for created/updated ids"
+requiresFresh: true
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: bootstrap-history
+    xin:
+      args:
+        - history
+    expect:
+      - path: /data/newState
+        exists: true
+    save:
+      state0: /data/newState
+
+  - name: send-one
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history hydrate"
+        - --text
+        - "hello"
+
+  - name: wait-visible-in-search
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:"history hydrate"
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      newEmailId: /data/items/0/emailId
+
+  - name: history-hydrate-since-state0
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - history
+        - --since
+        - ${state0}
+        - --max
+        - "100"
+        - --hydrate
+    expect:
+      - path: /data/changes/created
+        contains: ${newEmailId}
+      - path: /data/hydrated/created/0/emailId
+        equals: ${newEmailId}
+      - path: /data/hydrated/created/0/threadId
+        exists: true
