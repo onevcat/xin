@@ -158,8 +158,12 @@ fn header_value_to_json(v: &HeaderValue) -> Value {
             // `:all` for addresses yields Vec<Vec<EmailAddress>>.
             serde_json::to_value(groups).unwrap_or(Value::Null)
         }
-        HeaderValue::AsGroupedAddresses(groups) => serde_json::to_value(groups).unwrap_or(Value::Null),
-        HeaderValue::AsGroupedAddressesAll(groups) => serde_json::to_value(groups).unwrap_or(Value::Null),
+        HeaderValue::AsGroupedAddresses(groups) => {
+            serde_json::to_value(groups).unwrap_or(Value::Null)
+        }
+        HeaderValue::AsGroupedAddressesAll(groups) => {
+            serde_json::to_value(groups).unwrap_or(Value::Null)
+        }
         HeaderValue::AsTextListAll(list) => serde_json::to_value(list).unwrap_or(Value::Null),
     }
 }

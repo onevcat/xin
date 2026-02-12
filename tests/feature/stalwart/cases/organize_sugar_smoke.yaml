@@ -1,0 +1,253 @@
+id: organize_sugar_smoke
+it: "email-level and thread-level sugar commands (read/unread/archive/trash) work against Stalwart"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: send-to-self
+    say:
+      - "Given alice is authenticated"
+      - "When alice sends a message to herself"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] organize sugar smoke"
+        - --text
+        - "hello from xin"
+
+  - name: wait-visible-in-search
+    say:
+      - "Then the message should become searchable"
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:organize
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: ${runId}
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId: /data/items/0/emailId
+      threadId: /data/items/0/threadId
+
+  - name: read-email
+    say:
+      - "And read command marks email as seen"
+    xin:
+      args:
+        - read
+        - ${emailId}
+    expect:
+      - path: /data/appliedTo/emailIds/0
+        equals: ${emailId}
+      - path: /data/changes/keywords/added/0
+        equals: "$seen"
+
+  - name: get-after-read
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /data/email/keywords/$seen
+        equals: true
+
+  - name: unread-email
+    say:
+      - "And unread command removes $seen"
+    xin:
+      args:
+        - unread
+        - ${emailId}
+    expect:
+      - path: /data/appliedTo/emailIds/0
+        equals: ${emailId}
+      - path: /data/changes/keywords/removed/0
+        equals: "$seen"
+
+  - name: get-after-unread
+    xin:
+      args:
+        - get
+        - ${emailId}
+    expect:
+      - path: /data/email/keywords/$seen
+        exists: false
+
+  - name: send-to-self-2
+    say:
+      - "And we can test thread-level sugar"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] thread sugar"
+        - --text
+        - "hello 2"
+
+  - name: wait-visible-in-search-2
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:thread
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: ${runId}
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId2: /data/items/0/emailId
+      threadId2: /data/items/0/threadId
+
+  - name: thread-read
+    say:
+      - "And thread read marks all emails in thread as seen"
+    xin:
+      args:
+        - thread
+        - read
+        - ${threadId2}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId2}
+      - path: /data/appliedTo/emailIds/0
+        exists: true
+
+  - name: get-after-thread-read
+    xin:
+      args:
+        - get
+        - ${emailId2}
+    expect:
+      - path: /data/email/keywords/$seen
+        equals: true
+
+  - name: thread-unread
+    say:
+      - "And thread unread removes $seen from all emails in thread"
+    xin:
+      args:
+        - thread
+        - unread
+        - ${threadId2}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId2}
+
+  - name: get-after-thread-unread
+    xin:
+      args:
+        - get
+        - ${emailId2}
+    expect:
+      - path: /data/email/keywords/$seen
+        exists: false
+
+  - name: send-to-self-3
+    say:
+      - "And we can test thread archive and trash"
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] thread archive trash"
+        - --text
+        - "hello 3"
+
+  - name: wait-visible-in-search-3
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:archive
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/subject
+        contains: ${runId}
+      - path: /data/items/0/emailId
+        exists: true
+      - path: /data/items/0/threadId
+        exists: true
+    save:
+      emailId3: /data/items/0/emailId
+      threadId3: /data/items/0/threadId
+
+  - name: thread-archive
+    say:
+      - "And thread archive removes inbox membership"
+    xin:
+      args:
+        - thread
+        - archive
+        - ${threadId3}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId3}
+
+  - name: get-after-thread-archive
+    xin:
+      args:
+        - get
+        - ${emailId3}
+    expect:
+      - path: /data/email/mailboxIds
+        exists: true
+
+  - name: thread-trash
+    say:
+      - "And thread trash moves to trash mailbox"
+    xin:
+      args:
+        - thread
+        - trash
+        - ${threadId3}
+    expect:
+      - path: /data/appliedTo/threadId
+        equals: ${threadId3}
+
+  - name: get-after-thread-trash
+    xin:
+      args:
+        - get
+        - ${emailId3}
+    expect:
+      - path: /data/email/mailboxIds
+        exists: true

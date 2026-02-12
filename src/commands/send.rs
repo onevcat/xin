@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::backend::{Backend, ModifyPlan, UploadedBlob};
 use crate::cli::{
     DraftsCreateArgs, DraftsDeleteArgs, DraftsDestroyArgs, DraftsGetArgs, DraftsListArgs,
-    DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
+    DraftsRewriteArgs, DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
 };
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -23,6 +23,65 @@ fn read_text_arg(value: &str) -> Result<String, XinErrorOut> {
 fn to_rfc3339(ts: Option<i64>) -> Option<String> {
     ts.and_then(|v| DateTime::<Utc>::from_timestamp(v, 0))
         .map(|dt| dt.to_rfc3339())
+}
+
+fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> Option<String> {
+    let needle = s.trim();
+    if needle.is_empty() {
+        return None;
+    }
+
+    // 0) direct id match
+    for m in mailboxes {
+        if let Some(id) = m.id() {
+            if id == needle {
+                return Some(id.to_string());
+            }
+        }
+    }
+
+    // 1) role match
+    let needle_lower = needle.to_lowercase();
+    let role = match needle_lower.as_str() {
+        "spam" => "junk",
+        "bin" => "trash",
+        other => other,
+    };
+
+    let role_match = mailboxes.iter().find(|m| {
+        use jmap_client::mailbox::Role;
+        match (role, m.role()) {
+            ("inbox", Role::Inbox)
+            | ("trash", Role::Trash)
+            | ("junk", Role::Junk)
+            | ("sent", Role::Sent)
+            | ("drafts", Role::Drafts)
+            | ("archive", Role::Archive)
+            | ("important", Role::Important) => true,
+            (other, Role::Other(s)) => other == s.to_lowercase(),
+            _ => false,
+        }
+    });
+
+    if let Some(m) = role_match {
+        return m.id().map(|id| id.to_string());
+    }
+
+    // 2) exact name match
+    if let Some(m) = mailboxes.iter().find(|m| m.name() == Some(needle)) {
+        return m.id().map(|id| id.to_string());
+    }
+
+    // 3) case-insensitive name match
+    let lower = needle.to_lowercase();
+    if let Some(m) = mailboxes
+        .iter()
+        .find(|m| m.name().map(|n| n.to_lowercase()) == Some(lower.clone()))
+    {
+        return m.id().map(|id| id.to_string());
+    }
+
+    None
 }
 
 fn find_drafts_mailbox_id(
@@ -72,9 +131,9 @@ fn resolve_identity(
     selector: Option<&str>,
 ) -> Result<(String, Option<String>, String), XinErrorOut> {
     let idt = match selector {
-        None => identities.first().ok_or_else(|| {
-            XinErrorOut::config("no identities available".to_string())
-        })?,
+        None => identities
+            .first()
+            .ok_or_else(|| XinErrorOut::config("no identities available".to_string()))?,
         Some(sel) => {
             let sel_lower = sel.to_lowercase();
             identities
@@ -147,11 +206,7 @@ async fn upload_attachments(
 
         let content_type = guess_content_type(p).unwrap_or("application/octet-stream");
         let name = infer_filename(p);
-        uploaded.push(
-            backend
-                .upload_blob(bytes, Some(content_type), name)
-                .await?,
-        );
+        uploaded.push(backend.upload_blob(bytes, Some(content_type), name).await?);
     }
 
     Ok(uploaded)
@@ -179,7 +234,12 @@ pub async fn identities_list(account: Option<String>) -> Envelope<Value> {
         })
         .collect::<Vec<_>>();
 
-    Envelope::ok("identities.list", account, json!({"identities": out}), Meta::default())
+    Envelope::ok(
+        "identities.list",
+        account,
+        json!({"identities": out}),
+        Meta::default(),
+    )
 }
 
 pub async fn identities_get(account: Option<String>, args: &IdentitiesGetArgs) -> Envelope<Value> {
@@ -195,8 +255,7 @@ pub async fn identities_get(account: Option<String>, args: &IdentitiesGetArgs) -
 
     let sel = args.id.as_str();
     let found = identities.iter().find(|i| {
-        i.id().map(|id| id == sel).unwrap_or(false)
-            || i.email().map(|e| e == sel).unwrap_or(false)
+        i.id().map(|id| id == sel).unwrap_or(false) || i.email().map(|e| e == sel).unwrap_or(false)
     });
 
     let Some(i) = found else {
@@ -266,13 +325,11 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err("send", account, e),
     };
 
-    let (identity_id, from_name, from_email) = match resolve_identity(
-        &identities,
-        args.identity.as_deref(),
-    ) {
-        Ok(v) => v,
-        Err(e) => return Envelope::err("send", account, e),
-    };
+    let (identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err("send", account, e),
+        };
 
     let uploaded = match upload_attachments(&backend, &args.attach).await {
         Ok(v) => v,
@@ -416,7 +473,10 @@ pub async fn drafts_get(account: Option<String>, args: &DraftsGetArgs) -> Envelo
             }
             Err(e) => return Envelope::err(command_name, account, e),
         },
-        _ => match backend.get_email(&args.draft_email_id, requested_props).await {
+        _ => match backend
+            .get_email(&args.draft_email_id, requested_props)
+            .await
+        {
             Ok(Some(e)) => e,
             Ok(None) => {
                 return Envelope::err(
@@ -516,13 +576,11 @@ pub async fn drafts_create(account: Option<String>, args: &DraftsCreateArgs) -> 
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let (_identity_id, from_name, from_email) = match resolve_identity(
-        &identities,
-        args.identity.as_deref(),
-    ) {
-        Ok(v) => v,
-        Err(e) => return Envelope::err(command_name, account, e),
-    };
+    let (_identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
 
     let uploaded = match upload_attachments(&backend, &args.attach).await {
         Ok(v) => v,
@@ -589,6 +647,123 @@ pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> 
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
+    if args.add.is_empty()
+        && args.remove.is_empty()
+        && args.add_mailbox.is_empty()
+        && args.remove_mailbox.is_empty()
+        && args.add_keyword.is_empty()
+        && args.remove_keyword.is_empty()
+    {
+        return Envelope::err(
+            command_name,
+            account,
+            XinErrorOut::usage("no changes specified".to_string()),
+        );
+    }
+
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let mut plan = ModifyPlan::default();
+
+    // Explicit mailbox flags.
+    for m in &args.add_mailbox {
+        let id = resolve_mailbox_id(m, &mailboxes)
+            .ok_or_else(|| XinErrorOut::usage(format!("unknown mailbox: {m}")));
+        let id = match id {
+            Ok(v) => v,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
+        plan.add_mailboxes.push(id);
+    }
+
+    for m in &args.remove_mailbox {
+        let id = resolve_mailbox_id(m, &mailboxes)
+            .ok_or_else(|| XinErrorOut::usage(format!("unknown mailbox: {m}")));
+        let id = match id {
+            Ok(v) => v,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
+        plan.remove_mailboxes.push(id);
+    }
+
+    for k in &args.add_keyword {
+        plan.add_keywords.push(k.clone());
+    }
+
+    for k in &args.remove_keyword {
+        plan.remove_keywords.push(k.clone());
+    }
+
+    // Auto route: mailbox if resolvable, otherwise keyword.
+    for t in &args.add {
+        if let Some(id) = resolve_mailbox_id(t, &mailboxes) {
+            plan.add_mailboxes.push(id);
+        } else {
+            plan.add_keywords.push(t.clone());
+        }
+    }
+
+    for t in &args.remove {
+        if let Some(id) = resolve_mailbox_id(t, &mailboxes) {
+            plan.remove_mailboxes.push(id);
+        } else {
+            plan.remove_keywords.push(t.clone());
+        }
+    }
+
+    if let Err(e) = backend
+        .modify_emails(&[args.draft_email_id.clone()], &plan)
+        .await
+    {
+        return Envelope::err(command_name, account, e);
+    }
+
+    let email = match backend
+        .get_email(
+            &args.draft_email_id,
+            Some(vec![
+                jmap_client::email::Property::Id,
+                jmap_client::email::Property::ThreadId,
+            ]),
+        )
+        .await
+    {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::usage("draft not found".to_string()),
+            );
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    Envelope::ok(
+        command_name,
+        account,
+        json!({
+            "draft": { "emailId": args.draft_email_id, "threadId": email.thread_id() },
+        }),
+        Meta::default(),
+    )
+}
+
+pub async fn drafts_rewrite(
+    account: Option<String>,
+    args: &DraftsRewriteArgs,
+    force: bool,
+) -> Envelope<Value> {
+    let command_name = "drafts.rewrite";
+
+    let backend = match Backend::connect().await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
     if args.body.is_some() && args.body_file.is_some() {
         return Envelope::err(
             command_name,
@@ -612,11 +787,93 @@ pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> 
         return Envelope::err(
             command_name,
             account,
-            XinErrorOut::usage(
-                "--replace-attachments requires at least one --attach".to_string(),
-            ),
+            XinErrorOut::usage("--replace-attachments requires at least one --attach".to_string()),
         );
     }
+
+    let max_body_value_bytes = 1_048_576;
+    let existing = match backend
+        .get_email_full(&args.draft_email_id, max_body_value_bytes, vec![])
+        .await
+    {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::usage("draft not found".to_string()),
+            );
+        }
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    // Resolve Drafts mailbox id for the new draft.
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
+    // Existing envelope fields.
+    let existing_to = existing
+        .to()
+        .map(|v| v.iter().map(|a| a.email().to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let existing_cc = existing
+        .cc()
+        .map(|v| v.iter().map(|a| a.email().to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let existing_bcc = existing
+        .bcc()
+        .map(|v| v.iter().map(|a| a.email().to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let existing_subject = existing.subject().map(|s| s.to_string());
+
+    // Existing body.
+    let (b, _warnings) = crate::schema::extract_full_body(&existing, max_body_value_bytes);
+    let existing_text = b
+        .get("text")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let existing_html = b
+        .get("html")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    // Existing attachments.
+    let mut existing_attachments: Vec<UploadedBlob> = Vec::new();
+    if let Some(parts) = existing.attachments() {
+        for p in parts {
+            if let (Some(blob_id), Some(ct)) = (p.blob_id(), p.content_type()) {
+                existing_attachments.push(UploadedBlob {
+                    blob_id: blob_id.to_string(),
+                    content_type: ct.to_string(),
+                    size: p.size(),
+                    name: p.name().map(|n| n.to_string()),
+                });
+            }
+        }
+    }
+
+    // Existing From.
+    let mut existing_from_name: Option<String> = None;
+    let mut existing_from_email: Option<String> = None;
+    if let Some(froms) = existing.from() {
+        if let Some(a) = froms.first() {
+            existing_from_name = a.name().map(|n| n.to_string());
+            existing_from_email = Some(a.email().to_string());
+        }
+    }
+
+    // Apply overrides.
+    let final_to = args.to.clone().unwrap_or(existing_to);
+    let final_cc = args.cc.clone().unwrap_or(existing_cc);
+    let final_bcc = args.bcc.clone().unwrap_or(existing_bcc);
+    let final_subject = args.subject.as_deref().or(existing_subject.as_deref());
 
     let body_text = match (&args.body, &args.body_file) {
         (Some(s), None) => Some(match read_text_arg(s) {
@@ -638,88 +895,22 @@ pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> 
         None => None,
     };
 
-    let wants_body_or_attachments = body_text.is_some()
-        || body_html.is_some()
-        || !args.attach.is_empty()
-        || args.clear_attachments
-        || args.replace_attachments;
+    let final_text: Option<String> = body_text.or(existing_text);
+    let final_html: Option<String> = body_html.or(existing_html);
 
-    let mut existing_text: Option<String> = None;
-    let mut existing_html: Option<String> = None;
-    let mut existing_attachments: Vec<UploadedBlob> = Vec::new();
-
-    if wants_body_or_attachments {
-        let max_body_value_bytes = 1_048_576;
-        let email = match backend
-            .get_email_full(&args.draft_email_id, max_body_value_bytes, vec![])
-            .await
-        {
-            Ok(Some(e)) => e,
-            Ok(None) => {
-                return Envelope::err(
-                    command_name,
-                    account,
-                    XinErrorOut::usage("draft not found".to_string()),
-                );
-            }
-            Err(e) => return Envelope::err(command_name, account, e),
-        };
-
-        let (b, _warnings) = crate::schema::extract_full_body(&email, max_body_value_bytes);
-        existing_text = b
-            .get("text")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        existing_html = b
-            .get("html")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        if let Some(parts) = email.attachments() {
-            for p in parts {
-                if let (Some(blob_id), Some(ct)) = (p.blob_id(), p.content_type()) {
-                    existing_attachments.push(UploadedBlob {
-                        blob_id: blob_id.to_string(),
-                        content_type: ct.to_string(),
-                        size: p.size(),
-                        name: p.name().map(|n| n.to_string()),
-                    });
-                }
-            }
-        }
-    }
-
-    let final_text: Option<String> = if body_text.is_some() {
-        body_text
-    } else {
-        existing_text
+    let uploaded_new = match upload_attachments(&backend, &args.attach).await {
+        Ok(v) => v,
+        Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let final_html: Option<String> = if body_html.is_some() {
-        body_html
+    let attachments_for_new_draft: Vec<UploadedBlob> = if args.clear_attachments {
+        Vec::new()
+    } else if args.replace_attachments {
+        uploaded_new.clone()
     } else {
-        existing_html
-    };
-
-    let (attachments_for_update, uploaded_new) = if wants_body_or_attachments {
-        if args.clear_attachments {
-            (Some(Vec::<UploadedBlob>::new()), Vec::<UploadedBlob>::new())
-        } else {
-            let mut atts: Vec<UploadedBlob> = Vec::new();
-            if !args.replace_attachments {
-                atts.extend(existing_attachments);
-            }
-
-            let uploaded = match upload_attachments(&backend, &args.attach).await {
-                Ok(v) => v,
-                Err(e) => return Envelope::err(command_name, account, e),
-            };
-            atts.extend(uploaded.clone());
-
-            (Some(atts), uploaded)
-        }
-    } else {
-        (None, Vec::<UploadedBlob>::new())
+        let mut out = existing_attachments;
+        out.extend(uploaded_new.clone());
+        out
     };
 
     let (from_name, from_email) = if let Some(sel) = args.identity.as_deref() {
@@ -727,73 +918,88 @@ pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> 
             Ok(i) => i,
             Err(e) => return Envelope::err(command_name, account, e),
         };
-
         let (_identity_id, name, email) = match resolve_identity(&identities, Some(sel)) {
             Ok(v) => v,
             Err(e) => return Envelope::err(command_name, account, e),
         };
-
-        (name, Some(email))
+        (name, email)
+    } else if let Some(email) = existing_from_email {
+        (existing_from_name, email)
     } else {
-        (None, None)
+        let identities = match backend.list_identities().await {
+            Ok(i) => i,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
+        let (_identity_id, name, email) = match resolve_identity(&identities, None) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
+        (name, email)
     };
 
-    if args.to.is_none()
-        && args.cc.is_none()
-        && args.bcc.is_none()
-        && args.subject.is_none()
-        && !wants_body_or_attachments
-        && args.identity.is_none()
-    {
-        return Envelope::err(
-            command_name,
-            account,
-            XinErrorOut::usage("no changes specified".to_string()),
-        );
-    }
-
-    let attachments_slice: Option<&[UploadedBlob]> =
-        attachments_for_update.as_ref().map(|v| v.as_slice());
-
-    if let Err(e) = backend
-        .update_draft_email(
-            &args.draft_email_id,
+    let new_email = match backend
+        .create_draft_email(
+            &drafts_id,
             from_name,
             from_email,
-            args.to.as_deref(),
-            args.cc.as_deref(),
-            args.bcc.as_deref(),
-            args.subject.as_deref(),
+            &final_to,
+            &final_cc,
+            &final_bcc,
+            final_subject,
             final_text.as_deref(),
             final_html.as_deref(),
-            attachments_slice,
+            &attachments_for_new_draft,
         )
         .await
     {
-        return Envelope::err(command_name, account, e);
-    }
+        Ok(e) => e,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
 
-    // Fetch threadId for output stability.
-    let updated = match backend
-        .get_email(
-            &args.draft_email_id,
-            Some(vec![
-                jmap_client::email::Property::Id,
-                jmap_client::email::Property::ThreadId,
-            ]),
-        )
-        .await
-    {
-        Ok(Some(e)) => e,
-        Ok(None) => {
+    let new_email_id = match new_email.id() {
+        Some(id) => id.to_string(),
+        None => {
             return Envelope::err(
                 command_name,
                 account,
-                XinErrorOut::config("updated draft not found after update".to_string()),
+                XinErrorOut::config("Email/set did not return email id".to_string()),
             );
         }
-        Err(e) => return Envelope::err(command_name, account, e),
     };
+
+    // Clean up the old draft.
+    // Default: non-destructive (remove Drafts mailbox membership + $draft keyword).
+    // If --destroy-old is set, requires global --force.
+    let mut warnings: Vec<String> = Vec::new();
+    if args.destroy_old {
+        if !force {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::usage("--destroy-old requires global --force".to_string()),
+            );
+        }
+
+        if let Err(e) = backend.destroy_emails(&[args.draft_email_id.clone()]).await {
+            warnings.push(format!(
+                "failed to destroy replaced draft {}: {}",
+                args.draft_email_id, e.message
+            ));
+        }
+    } else {
+        let mut plan = ModifyPlan::default();
+        plan.remove_mailboxes.push(drafts_id);
+        plan.remove_keywords.push("$draft".to_string());
+        if let Err(e2) = backend
+            .modify_emails(&[args.draft_email_id.clone()], &plan)
+            .await
+        {
+            warnings.push(format!(
+                "failed to remove Drafts membership for replaced draft {}: {}",
+                args.draft_email_id, e2.message
+            ));
+        }
+    }
 
     let uploaded_out = uploaded_new
         .iter()
@@ -810,10 +1016,18 @@ pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> 
         command_name,
         account,
         json!({
-            "draft": { "emailId": args.draft_email_id, "threadId": updated.thread_id() },
-            "uploaded": uploaded_out
+            "draft": { "emailId": new_email_id, "threadId": new_email.thread_id() },
+            "uploaded": uploaded_out,
+            "replacedFrom": args.draft_email_id
         }),
-        Meta::default(),
+        Meta {
+            warnings: if warnings.is_empty() {
+                None
+            } else {
+                Some(warnings)
+            },
+            ..Meta::default()
+        },
     )
 }
 
@@ -830,13 +1044,11 @@ pub async fn drafts_send(account: Option<String>, args: &DraftsSendArgs) -> Enve
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let (identity_id, _from_name, _from_email) = match resolve_identity(
-        &identities,
-        args.identity.as_deref(),
-    ) {
-        Ok(v) => v,
-        Err(e) => return Envelope::err(command_name, account, e),
-    };
+    let (identity_id, _from_name, _from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err(command_name, account, e),
+        };
 
     let submission = match backend
         .submit_email(&args.draft_email_id, &identity_id)
@@ -896,9 +1108,20 @@ pub async fn drafts_delete(account: Option<String>, args: &DraftsDeleteArgs) -> 
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    // Non-destructive delete: remove Drafts mailbox membership.
+    // Non-destructive delete: move draft out of Drafts and into Trash.
+    // Rationale: Email.mailboxIds must not become empty; some servers may reject removing the
+    // last mailbox membership. Moving to Trash preserves recoverability while removing from Drafts.
+    let trash_id = resolve_mailbox_id("trash", &mailboxes)
+        .ok_or_else(|| XinErrorOut::config("trash mailbox not found".to_string()));
+    let trash_id = match trash_id {
+        Ok(v) => v,
+        Err(e) => return Envelope::err(command_name, account, e),
+    };
+
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(drafts_id);
+    plan.add_mailboxes.push(trash_id);
+    plan.remove_keywords.push("$draft".to_string());
 
     if let Err(e) = backend.modify_emails(&args.draft_email_ids, &plan).await {
         return Envelope::err(command_name, account, e);

@@ -52,10 +52,7 @@ fn parse_role(role: &str) -> jmap_client::mailbox::Role {
     }
 }
 
-fn resolve_mailbox_id(
-    s: &str,
-    mailboxes: &[jmap_client::mailbox::Mailbox],
-) -> Option<String> {
+fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> Option<String> {
     let needle = s.trim();
     if needle.is_empty() {
         return None;
@@ -213,9 +210,7 @@ pub async fn get(
         }
     };
 
-    let mailbox = mailboxes
-        .into_iter()
-        .find(|m| m.id() == Some(id.as_str()));
+    let mailbox = mailboxes.into_iter().find(|m| m.id() == Some(id.as_str()));
 
     match mailbox {
         Some(m) => {
@@ -258,12 +253,7 @@ pub async fn create(
     let role = args.role.as_deref().map(parse_role);
 
     let created = match backend
-        .create_mailbox(
-            args.name.clone(),
-            args.parent.clone(),
-            role,
-            args.subscribe,
-        )
+        .create_mailbox(args.name.clone(), args.parent.clone(), role, args.subscribe)
         .await
     {
         Ok(v) => v,

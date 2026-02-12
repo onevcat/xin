@@ -519,7 +519,14 @@ pub enum DraftsCommand {
     List(DraftsListArgs),
     Get(DraftsGetArgs),
     Create(DraftsCreateArgs),
+    /// Metadata-only update that MUST NOT change the draft id.
+    ///
+    /// In v0, JMAP Email properties like subject/from/to/body/attachments are (RFC 8621)
+    /// immutable, and some servers (e.g. Stalwart) reject changing them via Email/set(update).
+    /// Use `drafts rewrite` to change message content.
     Update(DraftsUpdateArgs),
+    /// Rewrite a draft's message content by creating a new draft and replacing the old one.
+    Rewrite(DraftsRewriteArgs),
     /// Remove draft(s) from the Drafts mailbox (non-destructive).
     Delete(DraftsDeleteArgs),
     /// Permanently destroy draft email(s). Requires global --force.
@@ -577,6 +584,35 @@ pub struct DraftsCreateArgs {
 #[derive(Args, Debug)]
 pub struct DraftsUpdateArgs {
     pub draft_email_id: String,
+
+    /// Auto route: mailbox if resolvable, otherwise keyword.
+    #[arg(long = "add")]
+    pub add: Vec<String>,
+
+    /// Auto route: mailbox if resolvable, otherwise keyword.
+    #[arg(long = "remove")]
+    pub remove: Vec<String>,
+
+    #[arg(long)]
+    pub add_mailbox: Vec<String>,
+
+    #[arg(long)]
+    pub remove_mailbox: Vec<String>,
+
+    #[arg(long)]
+    pub add_keyword: Vec<String>,
+
+    #[arg(long)]
+    pub remove_keyword: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct DraftsRewriteArgs {
+    pub draft_email_id: String,
+
+    /// Destroy the old draft after rewriting. Requires global --force.
+    #[arg(long)]
+    pub destroy_old: bool,
 
     #[arg(long, num_args = 1..)]
     pub to: Option<Vec<String>>,

@@ -63,18 +63,36 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Labels { command: sub } => match sub {
             LabelsCommand::List(args) => labels::list("labels.list", account.clone(), args).await,
             LabelsCommand::Get(args) => labels::get("labels.get", account.clone(), args).await,
-            LabelsCommand::Create(args) => labels::create("labels.create", account.clone(), args).await,
-            LabelsCommand::Rename(args) => labels::rename("labels.rename", account.clone(), args).await,
-            LabelsCommand::Delete(args) => labels::delete("labels.delete", account.clone(), args).await,
-            LabelsCommand::Modify(args) => labels::modify("labels.modify", account.clone(), args).await,
+            LabelsCommand::Create(args) => {
+                labels::create("labels.create", account.clone(), args).await
+            }
+            LabelsCommand::Rename(args) => {
+                labels::rename("labels.rename", account.clone(), args).await
+            }
+            LabelsCommand::Delete(args) => {
+                labels::delete("labels.delete", account.clone(), args).await
+            }
+            LabelsCommand::Modify(args) => {
+                labels::modify("labels.modify", account.clone(), args).await
+            }
         },
         Command::Mailboxes { command: sub } => match sub {
-            LabelsCommand::List(args) => labels::list("mailboxes.list", account.clone(), args).await,
+            LabelsCommand::List(args) => {
+                labels::list("mailboxes.list", account.clone(), args).await
+            }
             LabelsCommand::Get(args) => labels::get("mailboxes.get", account.clone(), args).await,
-            LabelsCommand::Create(args) => labels::create("mailboxes.create", account.clone(), args).await,
-            LabelsCommand::Rename(args) => labels::rename("mailboxes.rename", account.clone(), args).await,
-            LabelsCommand::Delete(args) => labels::delete("mailboxes.delete", account.clone(), args).await,
-            LabelsCommand::Modify(args) => labels::modify("mailboxes.modify", account.clone(), args).await,
+            LabelsCommand::Create(args) => {
+                labels::create("mailboxes.create", account.clone(), args).await
+            }
+            LabelsCommand::Rename(args) => {
+                labels::rename("mailboxes.rename", account.clone(), args).await
+            }
+            LabelsCommand::Delete(args) => {
+                labels::delete("mailboxes.delete", account.clone(), args).await
+            }
+            LabelsCommand::Modify(args) => {
+                labels::modify("mailboxes.modify", account.clone(), args).await
+            }
         },
 
         Command::Identities {
@@ -91,6 +109,9 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
             DraftsCommand::Get(args) => send::drafts_get(account.clone(), args).await,
             DraftsCommand::Create(args) => send::drafts_create(account.clone(), args).await,
             DraftsCommand::Update(args) => send::drafts_update(account.clone(), args).await,
+            DraftsCommand::Rewrite(args) => {
+                send::drafts_rewrite(account.clone(), args, cli.force).await
+            }
             DraftsCommand::Delete(args) => send::drafts_delete(account.clone(), args).await,
             DraftsCommand::Destroy(args) => {
                 send::drafts_destroy(account.clone(), args, cli.force).await
@@ -166,6 +187,7 @@ fn command_name(cmd: &Command) -> (String, Option<String>) {
             DraftsCommand::Get(_) => ("drafts.get".to_string(), None),
             DraftsCommand::Create(_) => ("drafts.create".to_string(), None),
             DraftsCommand::Update(_) => ("drafts.update".to_string(), None),
+            DraftsCommand::Rewrite(_) => ("drafts.rewrite".to_string(), None),
             DraftsCommand::Delete(_) => ("drafts.delete".to_string(), None),
             DraftsCommand::Destroy(_) => ("drafts.destroy".to_string(), None),
             DraftsCommand::Send(_) => ("drafts.send".to_string(), None),

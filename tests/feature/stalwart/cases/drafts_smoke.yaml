@@ -1,0 +1,158 @@
+id: write_drafts_smoke
+it: "drafts v0: identities get + drafts list/delete/destroy work end-to-end (Stalwart)"
+requiresFresh: true
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+steps:
+  - name: identities-list
+    xin:
+      args: [identities, list]
+    expect:
+      - path: /data/identities/0/id
+        exists: true
+      - path: /data/identities/0/email
+        exists: true
+    save:
+      identityId: /data/identities/0/id
+      identityEmail: /data/identities/0/email
+
+  - name: identities-get-by-id
+    xin:
+      args:
+        - identities
+        - get
+        - ${identityId}
+    expect:
+      - path: /data/identity/id
+        equals: ${identityId}
+
+  - name: identities-get-by-email
+    xin:
+      args:
+        - identities
+        - get
+        - ${identityEmail}
+    expect:
+      - path: /data/identity/email
+        equals: ${identityEmail}
+
+  - name: drafts-create
+    xin:
+      args:
+        - drafts
+        - create
+        - --to
+        - bob@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] drafts-smoke"
+        - --body
+        - "hello"
+    expect:
+      - path: /data/draft/emailId
+        exists: true
+    save:
+      draftId: /data/draft/emailId
+
+  - name: drafts-list-contains-created
+    retry:
+      attempts: 20
+      sleepMs: 500
+    xin:
+      args:
+        - drafts
+        - list
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/emailId
+        equals: ${draftId}
+      - path: /data/items/0/subject
+        equals: "[xin-case:${caseId}:${runId}] drafts-smoke"
+
+  - name: drafts-update-metadata-add-keyword
+    xin:
+      args:
+        - drafts
+        - update
+        - ${draftId}
+        - --add-keyword
+        - xinSmoke
+    expect:
+      - path: /data/draft/emailId
+        equals: ${draftId}
+
+  - name: drafts-get-metadata-contains-keyword
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - metadata
+    expect:
+      - path: /data/draft/keywords/xinSmoke
+        equals: true
+
+  - name: drafts-delete
+    xin:
+      args:
+        - drafts
+        - delete
+        - ${draftId}
+    expect:
+      - path: /data/deleted/0
+        equals: ${draftId}
+
+  - name: drafts-list-empty-after-delete
+    retry:
+      attempts: 20
+      sleepMs: 500
+    xin:
+      args:
+        - drafts
+        - list
+        - --max
+        - "10"
+    expect:
+      - path: /data/items
+        equals: []
+
+  - name: drafts-destroy
+    xin:
+      args:
+        - --force
+        - drafts
+        - destroy
+        - ${draftId}
+    expect:
+      - path: /data/destroyed/0
+        equals: ${draftId}
+
+  - name: drafts-get-after-destroy
+    expectOk: false
+    xin:
+      args:
+        - drafts
+        - get
+        - ${draftId}
+        - --format
+        - metadata
+    expect:
+      - path: /ok
+        equals: false
+      - path: /error/kind
+        equals: xinUsageError
+      - path: /error/message
+        contains: "draft not found"
