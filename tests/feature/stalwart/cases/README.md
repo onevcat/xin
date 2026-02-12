@@ -80,8 +80,7 @@ Fields:
   - `path: /data/items/0/subject`
   - `equals: <yaml value>`
   - `contains: <string>`
-  - `exists: true`
+  - `exists: true|false` (`true` = pointer exists and is not null; `false` = pointer is missing or null)
 - `save`: store values into variables.
   - key: var name
   - value: JSON pointer, e.g. `/data/items/0/emailId`
-
