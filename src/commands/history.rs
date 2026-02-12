@@ -36,7 +36,7 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
         Err(e) => return Envelope::err(command_name, account, e),
     };
 
-    let max_changes = args.max.unwrap_or(100);
+    let max_changes_default = 100;
 
     // Bootstrap: return current state and no changes.
     if args.since.is_none() && args.page.is_none() {
@@ -59,30 +59,43 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
     }
 
     // Normal: Email/changes.
+    //
+    // Paging rule:
+    // - If --page is provided, the token is the source of truth for sinceState/maxChanges.
+    // - If the user explicitly also provides --since/--max, they MUST match the token.
     let (since_state, used_max) = match &args.page {
-        Some(token) => match decode_page_token(token) {
-            Ok(t) => {
-                if t.max_changes != max_changes {
+        Some(token) => {
+            let t = match decode_page_token(token) {
+                Ok(t) => t,
+                Err(e) => return Envelope::err(command_name, account, e),
+            };
+
+            if let Some(max) = args.max {
+                if max != t.max_changes {
                     return Envelope::err(
                         command_name,
                         account,
                         XinErrorOut::usage("page token does not match args".to_string()),
                     );
                 }
-                if let Some(since) = &args.since {
-                    if since != &t.since_state {
-                        return Envelope::err(
-                            command_name,
-                            account,
-                            XinErrorOut::usage("page token does not match args".to_string()),
-                        );
-                    }
-                }
-                (t.since_state, t.max_changes)
             }
-            Err(e) => return Envelope::err(command_name, account, e),
-        },
-        None => (args.since.clone().unwrap_or_default(), max_changes),
+
+            if let Some(since) = &args.since {
+                if since != &t.since_state {
+                    return Envelope::err(
+                        command_name,
+                        account,
+                        XinErrorOut::usage("page token does not match args".to_string()),
+                    );
+                }
+            }
+
+            (t.since_state, t.max_changes)
+        }
+        None => (
+            args.since.clone().unwrap_or_default(),
+            args.max.unwrap_or(max_changes_default),
+        ),
     };
 
     if since_state.trim().is_empty() {

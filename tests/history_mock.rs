@@ -307,3 +307,259 @@ async fn history_changes_paging_uses_new_state_as_continuation_cursor() {
         Some("m2")
     );
 }
+
+#[tokio::test]
+async fn history_page_token_is_source_of_truth_when_max_not_specified() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let changes_page1 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S0",
+                "newState": "S1",
+                "hasMoreChanges": true,
+                "created": ["m1"],
+                "updated": [],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .and(body_string_contains("\"sinceState\":\"S0\""))
+        .and(body_string_contains("\"maxChanges\":2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page1))
+        .mount(&server)
+        .await;
+
+    let output1 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--since", "S0", "--max", "2"])
+        .output()
+        .expect("run");
+
+    assert!(
+        output1.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output1.status.code(),
+        String::from_utf8_lossy(&output1.stdout),
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    let v1: serde_json::Value = serde_json::from_slice(&output1.stdout).expect("json");
+    let next_page = v1
+        .pointer("/meta/nextPage")
+        .and_then(|v| v.as_str())
+        .expect("meta.nextPage")
+        .to_string();
+
+    let changes_page2 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S1",
+                "newState": "S2",
+                "hasMoreChanges": false,
+                "created": [],
+                "updated": ["m2"],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .and(body_string_contains("\"sinceState\":\"S1\""))
+        .and(body_string_contains("\"maxChanges\":2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page2))
+        .mount(&server)
+        .await;
+
+    // NOTE: Intentionally omit --max here. Token should be the source of truth.
+    let output2 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--page", &next_page])
+        .output()
+        .expect("run");
+
+    assert!(
+        output2.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output2.status.code(),
+        String::from_utf8_lossy(&output2.stdout),
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    let v2: serde_json::Value = serde_json::from_slice(&output2.stdout).expect("json");
+    assert_eq!(v2.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        v2.pointer("/data/sinceState").and_then(|v| v.as_str()),
+        Some("S1")
+    );
+    assert_eq!(
+        v2.pointer("/data/newState").and_then(|v| v.as_str()),
+        Some("S2")
+    );
+}
+
+#[tokio::test]
+async fn history_page_token_max_mismatch_is_usage_error_and_does_not_hit_changes_endpoint() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let changes_page1 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S0",
+                "newState": "S1",
+                "hasMoreChanges": true,
+                "created": [],
+                "updated": [],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page1))
+        .mount(&server)
+        .await;
+
+    let out1 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--since", "S0", "--max", "2"])
+        .output()
+        .expect("run");
+
+    assert!(out1.status.success());
+
+    let v1: serde_json::Value = serde_json::from_slice(&out1.stdout).expect("json");
+    let tok = v1
+        .pointer("/meta/nextPage")
+        .and_then(|v| v.as_str())
+        .expect("meta.nextPage")
+        .to_string();
+
+    // Second run: change args (max) while reusing token => usage error.
+    let out2 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--page", &tok, "--max", "3"])
+        .output()
+        .expect("run");
+
+    assert!(!out2.status.success());
+
+    let v2: serde_json::Value = serde_json::from_slice(&out2.stdout).expect("json");
+    assert_eq!(v2.get("ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        v2.pointer("/error/kind").and_then(|v| v.as_str()),
+        Some("xinUsageError")
+    );
+
+    // Assert we only hit Email/changes once total.
+    let requests = server.received_requests().await.expect("requests");
+    let changes_posts = requests
+        .iter()
+        .filter(|r| String::from_utf8_lossy(&r.body).contains("Email/changes"))
+        .count();
+    assert_eq!(changes_posts, 1);
+}
+
+#[tokio::test]
+async fn history_page_token_since_mismatch_is_usage_error_and_does_not_hit_changes_endpoint() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let changes_page1 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S0",
+                "newState": "S1",
+                "hasMoreChanges": true,
+                "created": [],
+                "updated": [],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page1))
+        .mount(&server)
+        .await;
+
+    let out1 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--since", "S0", "--max", "2"])
+        .output()
+        .expect("run");
+
+    assert!(out1.status.success());
+
+    let v1: serde_json::Value = serde_json::from_slice(&out1.stdout).expect("json");
+    let tok = v1
+        .pointer("/meta/nextPage")
+        .and_then(|v| v.as_str())
+        .expect("meta.nextPage")
+        .to_string();
+
+    // Second run: change args (since) while reusing token => usage error.
+    let out2 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--page", &tok, "--since", "S999"])
+        .output()
+        .expect("run");
+
+    assert!(!out2.status.success());
+
+    let v2: serde_json::Value = serde_json::from_slice(&out2.stdout).expect("json");
+    assert_eq!(v2.get("ok").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        v2.pointer("/error/kind").and_then(|v| v.as_str()),
+        Some("xinUsageError")
+    );
+
+    // Assert we only hit Email/changes once total.
+    let requests = server.received_requests().await.expect("requests");
+    let changes_posts = requests
+        .iter()
+        .filter(|r| String::from_utf8_lossy(&r.body).contains("Email/changes"))
+        .count();
+    assert_eq!(changes_posts, 1);
+}
