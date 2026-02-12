@@ -107,8 +107,10 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
 
     let mut meta = Meta::default();
     if has_more {
+        // JMAP /changes pagination: continue with the `newState` returned by the
+        // previous call.
         meta.next_page = Some(encode_page_token(&PageToken {
-            since_state: since_state.clone(),
+            since_state: new_state.clone(),
             max_changes: used_max,
         }));
     }

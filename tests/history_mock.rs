@@ -197,3 +197,113 @@ async fn history_changes_returns_created_updated_destroyed_and_new_state() {
         Some("m_del")
     );
 }
+
+#[tokio::test]
+async fn history_changes_paging_uses_new_state_as_continuation_cursor() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let changes_page1 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S0",
+                "newState": "S1",
+                "hasMoreChanges": true,
+                "created": ["m1"],
+                "updated": [],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .and(body_string_contains("\"sinceState\":\"S0\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page1))
+        .mount(&server)
+        .await;
+
+    let output1 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--since", "S0", "--max", "100"])
+        .output()
+        .expect("run");
+
+    assert!(
+        output1.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output1.status.code(),
+        String::from_utf8_lossy(&output1.stdout),
+        String::from_utf8_lossy(&output1.stderr)
+    );
+
+    let v1: serde_json::Value = serde_json::from_slice(&output1.stdout).expect("json");
+    let next_page = v1
+        .pointer("/meta/nextPage")
+        .and_then(|v| v.as_str())
+        .expect("meta.nextPage");
+
+    let changes_page2 = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/changes", {
+                "accountId": "A",
+                "oldState": "S1",
+                "newState": "S2",
+                "hasMoreChanges": false,
+                "created": [],
+                "updated": ["m2"],
+                "destroyed": []
+            }, "c0"]
+        ]
+    });
+
+    // Expect the second call to continue from S1 (the newState from page 1).
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/changes"))
+        .and(body_string_contains("\"sinceState\":\"S1\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(changes_page2))
+        .mount(&server)
+        .await;
+
+    let output2 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args(["history", "--page", next_page, "--max", "100"])
+        .output()
+        .expect("run");
+
+    assert!(
+        output2.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output2.status.code(),
+        String::from_utf8_lossy(&output2.stdout),
+        String::from_utf8_lossy(&output2.stderr)
+    );
+
+    let v2: serde_json::Value = serde_json::from_slice(&output2.stdout).expect("json");
+    assert_eq!(v2.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        v2.pointer("/data/sinceState").and_then(|v| v.as_str()),
+        Some("S1")
+    );
+    assert_eq!(
+        v2.pointer("/data/newState").and_then(|v| v.as_str()),
+        Some("S2")
+    );
+    assert_eq!(
+        v2.pointer("/data/changes/updated/0")
+            .and_then(|v| v.as_str()),
+        Some("m2")
+    );
+}
