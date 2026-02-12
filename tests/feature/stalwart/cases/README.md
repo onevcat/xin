@@ -81,6 +81,7 @@ Fields:
   - `equals: <yaml value>`
   - `contains: <string>`
   - `exists: true|false` (`true` = pointer exists and is not null; `false` = pointer is missing or null)
+    - Note: `exists:false` does *not* mean the value is boolean false; use `equals: false` for that.
 - `save`: store values into variables.
   - key: var name
   - value: JSON pointer, e.g. `/data/items/0/emailId`
