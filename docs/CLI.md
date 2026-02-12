@@ -578,7 +578,16 @@ Drafts are emails in the Drafts mailbox.
 ### 5.1 `xin history [--since <state>] [--max N] [--page TOKEN]`
 **gog analog:** `gog gmail history`
 
-- Uses JMAP `Email/changes` to return changed/created/destroyed since state.
+- Purpose: **incremental sync cursor** for agents/automation.
+
+Behavior:
+- Bootstrap (no args): `xin history` returns the current Email collection state and empty changes.
+- Incremental: `xin history --since <state>` uses JMAP `Email/changes` to return `created/updated/destroyed` **emailIds** since that state.
+- Paging: when the server reports more changes, xin emits `meta.nextPage`; continue with `xin history --page <TOKEN>`.
+
+Default: `--max 100`.
+
+Output schema: see `docs/SCHEMA.md` §8.
 
 ### 5.2 `xin watch ...` (TBD, PLUS)
 

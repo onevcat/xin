@@ -860,6 +860,43 @@ impl Backend {
             })
     }
 
+    pub async fn email_state(&self) -> Result<String, XinErrorOut> {
+        let mut request = self.j.client().build();
+
+        // JMAP: using an empty ids list yields an empty list response but still returns the
+        // current collection state.
+        request.get_email().ids(Vec::<String>::new());
+
+        request
+            .send_single::<jmap_client::core::response::EmailGetResponse>()
+            .await
+            .map(|mut r| r.take_state())
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/get(state) failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
+    pub async fn email_changes(
+        &self,
+        since_state: &str,
+        max_changes: Option<usize>,
+    ) -> Result<jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>, XinErrorOut>
+    {
+        self.j
+            .client()
+            .email_changes(since_state.to_string(), max_changes)
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: format!("Email/changes failed: {e}"),
+                http: None,
+                jmap: None,
+            })
+    }
+
     pub async fn destroy_emails(&self, email_ids: &[String]) -> Result<(), XinErrorOut> {
         let mut request = self.j.client().build();
         request

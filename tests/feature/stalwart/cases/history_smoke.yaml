@@ -1,0 +1,85 @@
+id: history_smoke
+it: "history returns a bootstrap state and then reports new created messages"
+requiresFresh: true
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+  XIN_BASIC_USER: alice
+  XIN_BASIC_PASS: alice-pass
+
+steps:
+  - name: send-first
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history smoke 1"
+        - --text
+        - "hello 1"
+
+  - name: bootstrap-history
+    say:
+      - "Given we snapshot current Email state"
+    xin:
+      args:
+        - history
+    expect:
+      - path: /data/newState
+        exists: true
+      - path: /data/changes/created
+        exists: true
+    save:
+      state0: /data/newState
+
+  - name: send-second
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] history2"
+        - --text
+        - "hello 2"
+
+  - name: wait-visible-in-search-second
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:history2
+        - --max
+        - "5"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      newEmailId: /data/items/0/emailId
+
+  - name: history-since-state0
+    retry:
+      attempts: 30
+      sleepMs: 500
+    xin:
+      args:
+        - history
+        - --since
+        - ${state0}
+        - --max
+        - "100"
+    expect:
+      - path: /data/newState
+        exists: true
+      - path: /data/changes/created/0
+        equals: ${newEmailId}

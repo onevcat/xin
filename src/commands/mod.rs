@@ -2,6 +2,7 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
+mod history;
 mod inbox;
 mod labels;
 mod organize;
@@ -118,6 +119,8 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
             }
             DraftsCommand::Send(args) => send::drafts_send(account.clone(), args).await,
         },
+
+        Command::History(args) => history::history(account.clone(), args).await,
 
         _ => {
             let (command, _details) = command_name(&cli.command);

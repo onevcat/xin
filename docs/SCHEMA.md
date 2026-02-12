@@ -441,7 +441,52 @@ All `xin drafts ...` commands use the same envelope; their `data` shapes are:
 
 ---
 
-## 8) Notes / TBD
+## 8) History outputs
+
+### 8.1 `xin history` (bootstrap)
+
+When called with no `--since` and no `--page`, xin returns the current Email collection state and an empty change set.
+
+```json
+{
+  "sinceState": "S...",
+  "newState": "S...",
+  "hasMoreChanges": false,
+  "changes": {
+    "created": [],
+    "updated": [],
+    "destroyed": []
+  }
+}
+```
+
+### 8.2 `xin history --since <state> [--max N] [--page TOKEN]`
+
+Uses JMAP `Email/changes` to return IDs changed since `sinceState`.
+
+```json
+{
+  "sinceState": "S0",
+  "newState": "S1",
+  "hasMoreChanges": true,
+  "changes": {
+    "created": ["M..."] ,
+    "updated": ["M..."],
+    "destroyed": ["M..."]
+  }
+}
+```
+
+Paging:
+- If `hasMoreChanges=true`, xin sets `meta.nextPage` to an opaque token.
+- Continue with: `xin history --page <TOKEN>` (and the same `--max`).
+
+Notes:
+- `history` returns **IDs only** (it does not explain what fields changed). Use `xin get` to hydrate.
+
+---
+
+## 9) Notes / TBD
 
 - Exact `Email/get` properties requested from servers will vary; xin should keep the output normalized and stable.
 - Some servers may omit counts or certain fields; in that case, xin should set them to null rather than changing shape.
