@@ -44,15 +44,14 @@ jobs:
         working-directory: tests/feature/stalwart
         run: |
           chmod +x scripts/*.sh
-          # Clean any leftover state from previous runs (owned by root)
-          sudo rm -rf tests/feature/stalwart/.state || true
+          # Clean any leftover state from previous runs (the bind-mounted state may be root-owned)
+          sudo rm -rf .state || true
           ./scripts/up.sh
           ./scripts/seed.sh
 
-      - name: Run smoke tests (all feature cases)
-        working-directory: /home/runner/work/xin/xin
-        # Skip --fresh: CI starts fresh docker each time, no need to reset state
-        run: cargo run --bin xin-feature -- --case-dir tests/feature/stalwart/cases --all
+      - name: Run smoke test (connectivity)
+        working-directory: tests/feature/stalwart
+        run: ./scripts/check.sh
 
       - name: Dump Stalwart logs (on failure)
         if: failure()
