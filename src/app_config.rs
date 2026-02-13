@@ -83,15 +83,13 @@ pub fn default_config_path() -> Result<PathBuf, XinErrorOut> {
 
     let home = home_dir()?;
 
-    if cfg!(target_os = "macos") {
-        Ok(home.join("Library/Application Support/xin/config.json"))
-    } else {
-        let base = std::env::var("XDG_CONFIG_HOME")
-            .ok()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".config"));
-        Ok(base.join("xin/config.json"))
-    }
+    // Unified default location across platforms: ~/.config/xin/config.json
+    // (can be overridden by XDG_CONFIG_HOME or XIN_CONFIG_PATH).
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    Ok(base.join("xin/config.json"))
 }
 
 pub fn default_tokens_dir() -> Result<PathBuf, XinErrorOut> {

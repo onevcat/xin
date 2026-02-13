@@ -553,7 +553,7 @@ Notes:
 
 ```json
 {
-  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "path": "/Users/you/.config/xin/config.json",
   "created": true,
   "defaults": { "account": "fastmail" },
   "accounts": ["fastmail"]
@@ -564,14 +564,14 @@ Notes:
 
 ```json
 {
-  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "path": "/Users/you/.config/xin/config.json",
   "defaultAccount": "fastmail",
   "accounts": [
     {
       "name": "fastmail",
       "baseUrl": "https://api.fastmail.com",
       "sessionUrl": null,
-      "auth": { "type": "bearer", "tokenEnv": null, "tokenFile": "~/Library/Application Support/xin/tokens/fastmail.token" },
+      "auth": { "type": "bearer", "tokenEnv": null, "tokenFile": "~/.config/xin/tokens/fastmail.token" },
       "trustRedirectHosts": ["api.fastmail.com", "jmap.fastmail.com", "fastmail.com"]
     }
   ]
@@ -582,7 +582,7 @@ Notes:
 
 ```json
 {
-  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "path": "/Users/you/.config/xin/config.json",
   "defaultAccount": "fastmail"
 }
 ```
@@ -611,8 +611,8 @@ Note: secrets are never included in output.
 ```json
 {
   "account": "fastmail",
-  "configPath": "/Users/you/Library/Application Support/xin/config.json",
-  "tokenFile": "/Users/you/Library/Application Support/xin/tokens/fastmail.token"
+  "configPath": "/Users/you/.config/xin/config.json",
+  "tokenFile": "/Users/you/.config/xin/tokens/fastmail.token"
 }
 ```
 

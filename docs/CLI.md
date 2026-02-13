@@ -45,7 +45,7 @@ xin is a **standards client**:
 
 ### Config
 
-TBD (proposal): `~/.config/xin/config.json` (or macOS `~/Library/Application Support/xin/config.json`).
+TBD (proposal): `~/.config/xin/config.json`.
 
 Config should support multiple accounts:
 
@@ -651,9 +651,8 @@ xin supports multiple accounts via a config file. Precedence: **CLI flag > env >
 
 ### Config file location
 
-- macOS: `~/Library/Application Support/xin/config.json`
-- Linux (XDG): `~/.config/xin/config.json`
-- Override: `XIN_CONFIG_PATH` environment variable
+- Default: `~/.config/xin/config.json`
+- Override: `XDG_CONFIG_HOME` or `XIN_CONFIG_PATH`
 
 ### Config file format
 
@@ -664,7 +663,7 @@ xin supports multiple accounts via a config file. Precedence: **CLI flag > env >
     "fastmail": {
       "baseUrl": "https://api.fastmail.com",
       "trustRedirectHosts": ["api.fastmail.com", "jmap.fastmail.com", "fastmail.com"],
-      "auth": { "type": "bearer", "tokenFile": "~/Library/Application Support/xin/tokens/fastmail.token" }
+      "auth": { "type": "bearer", "tokenFile": "~/.config/xin/tokens/fastmail.token" }
     },
     "other": {
       "sessionUrl": "https://other.provider.com/.well-known/jmap",
