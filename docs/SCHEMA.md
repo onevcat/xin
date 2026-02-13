@@ -199,6 +199,27 @@ It returns the same `data.items[]` shape, plus two conveniences:
 
 ### 4.5 get (single email)
 
+### 4.6 url (Fastmail-only)
+
+```json
+{
+  "items": [
+    {
+      "id": "T...",
+      "kind": "thread",
+      "ok": true,
+      "emailId": "M...",
+      "messageId": "<...>",
+      "url": "https://app.fastmail.com/mail/search:msgid:%3C...%3E"
+    }
+  ]
+}
+```
+
+Notes:
+- For non-Fastmail accounts, `url` returns `ok=false` with `error.kind=xinNotImplemented`.
+- Each item may be `ok=false` if the id cannot be resolved or the email lacks `Message-ID`.
+
 `xin get <emailId> --format metadata|full|raw`
 
 - `metadata`: headers + summary + structure pointers

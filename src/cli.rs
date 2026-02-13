@@ -58,7 +58,7 @@ pub enum Command {
     /// Download an attachment.
     Attachment(AttachmentArgs),
 
-    /// Print webmail URL(s) if supported (TBD).
+    /// Print webmail URL(s) (Fastmail-only).
     Url(UrlArgs),
 
     /// Archive emails.

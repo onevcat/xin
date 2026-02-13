@@ -301,9 +301,14 @@ Next improvements (planned):
 ### 1.7 `xin url <id>...`
 **gog analog:** `gog gmail url <threadId>...`
 
-- Prints webmail URLs (if provider supports).
+- Prints webmail URLs.
+- **Fastmail-only**: for other providers, xin returns `xinNotImplemented`.
+- Implementation note: xin fetches the email `Message-ID` via JMAP and generates a Fastmail web search URL:
+  - `https://app.fastmail.com/mail/search:msgid:<urlencoded Message-ID>`
 
-**TBD:** likely provider-specific and may be unavailable on many JMAP servers.
+Input:
+- Each `<id>` may be a `threadId` or an `emailId`.
+- For a thread id, xin uses the first email in the thread as the lookup.
 
 ### 1.8 `xin inbox next [--all] [--oldest] [--max <n>] [--page <token>] [<query>]` (v0)
 
