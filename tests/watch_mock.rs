@@ -108,7 +108,10 @@ async fn watch_once_emits_ready_and_change_events_and_writes_checkpoint() {
     // First line should be a JSON event.
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
-    assert!(lines.len() >= 2, "expected multiple NDJSON lines, got: {stdout}");
+    assert!(
+        lines.len() >= 2,
+        "expected multiple NDJSON lines, got: {stdout}"
+    );
 
     let ready: serde_json::Value = serde_json::from_str(lines[0]).expect("ready json");
     assert_eq!(ready.get("type").and_then(|v| v.as_str()), Some("ready"));

@@ -542,7 +542,8 @@ Event types:
 
 Notes:
 - `--pretty` prints pretty JSON (multi-line) for humans; it is not NDJSON.
-- After the stream ends, xin prints the standard envelope as the final line (so consumers should treat `watch` output as a JSON-lines stream).
+- By default, after the stream ends, xin prints the standard envelope as the final line.
+- With `--no-envelope`, xin does **not** print the final envelope; on failures it emits a single `{"type":"error","error":{...}}` event and exits non-zero.
 
 ---
 

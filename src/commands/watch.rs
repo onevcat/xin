@@ -77,9 +77,22 @@ where
 pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value> {
     let command_name = "watch";
 
+    let emit = if args.pretty { pretty_line } else { json_line };
+    let emit_error = |e: &XinErrorOut| {
+        if args.no_envelope {
+            let v = serde_json::to_value(e).unwrap_or_else(
+                |_| json!({"kind":"unknown","message":"failed to serialize error"}),
+            );
+            emit(&json!({"type":"error","error": v}));
+        }
+    };
+
     let backend = match Backend::connect().await {
         Ok(b) => b,
-        Err(e) => return Envelope::err(command_name, account, e),
+        Err(e) => {
+            emit_error(&e);
+            return Envelope::err(command_name, account, e);
+        }
     };
 
     // Resolve start token priority:
@@ -103,26 +116,25 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
         Some(token) => {
             let t = match decode_page_token(token) {
                 Ok(t) => t,
-                Err(e) => return Envelope::err(command_name, account, e),
+                Err(e) => {
+                    emit_error(&e);
+                    return Envelope::err(command_name, account, e);
+                }
             };
 
             if let Some(max) = args.max {
                 if max != t.max_changes {
-                    return Envelope::err(
-                        command_name,
-                        account,
-                        XinErrorOut::usage("page token does not match args".to_string()),
-                    );
+                    let e = XinErrorOut::usage("page token does not match args".to_string());
+                    emit_error(&e);
+                    return Envelope::err(command_name, account, e);
                 }
             }
 
             if let Some(since) = &args.since {
                 if since != &t.since_state {
-                    return Envelope::err(
-                        command_name,
-                        account,
-                        XinErrorOut::usage("page token does not match args".to_string()),
-                    );
+                    let e = XinErrorOut::usage("page token does not match args".to_string());
+                    emit_error(&e);
+                    return Envelope::err(command_name, account, e);
                 }
             }
 
@@ -134,7 +146,10 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
             } else {
                 match backend.email_state().await {
                     Ok(s) => s,
-                    Err(e) => return Envelope::err(command_name, account, e),
+                    Err(e) => {
+                        emit_error(&e);
+                        return Envelope::err(command_name, account, e);
+                    }
                 }
             };
 
@@ -143,14 +158,10 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
     };
 
     if since_state.trim().is_empty() {
-        return Envelope::err(
-            command_name,
-            account,
-            XinErrorOut::usage("missing --since (or --page/--checkpoint)".to_string()),
-        );
+        let e = XinErrorOut::usage("missing --since (or --page/--checkpoint)".to_string());
+        emit_error(&e);
+        return Envelope::err(command_name, account, e);
     }
-
-    let emit = if args.pretty { pretty_line } else { json_line };
 
     // Initial ready event (useful for agents).
     emit(&json!({
@@ -168,12 +179,18 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
                 .await
             {
                 Ok((r, created, updated)) => (r, Some(created), Some(updated)),
-                Err(e) => return Envelope::err(command_name, account, e),
+                Err(e) => {
+                    emit_error(&e);
+                    return Envelope::err(command_name, account, e);
+                }
             }
         } else {
             match backend.email_changes(&since_state, Some(used_max)).await {
                 Ok(r) => (r, None, None),
-                Err(e) => return Envelope::err(command_name, account, e),
+                Err(e) => {
+                    emit_error(&e);
+                    return Envelope::err(command_name, account, e);
+                }
             }
         };
 
@@ -247,6 +264,7 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
 
         if let Some(path) = &args.checkpoint {
             if let Err(e) = write_checkpoint(path, &next_token) {
+                emit_error(&e);
                 return Envelope::err(command_name, account, e);
             }
         }
@@ -302,7 +320,10 @@ mod tests {
 
     #[tokio::test]
     async fn sleep_with_allows_injection() {
-        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
 
         let called = Arc::new(AtomicBool::new(false));
         let called2 = called.clone();

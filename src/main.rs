@@ -19,7 +19,13 @@ async fn main() {
     crate::debug::set_verbose(cli.verbose);
 
     let env = commands::dispatch(&cli).await;
-    output::print_envelope(&env);
+
+    // watch is primarily a streaming command; optionally suppress the final envelope for NDJSON-only consumers.
+    let suppress_envelope =
+        matches!(cli.command, crate::cli::Command::Watch(ref args) if args.no_envelope);
+    if !suppress_envelope {
+        output::print_envelope(&env);
+    }
 
     if !env.ok {
         std::process::exit(1);

@@ -725,4 +725,8 @@ pub struct WatchArgs {
     /// Human-friendly output (default is NDJSON for agents).
     #[arg(long)]
     pub pretty: bool,
+
+    /// Do not print the final xin JSON envelope line (stream-only).
+    #[arg(long)]
+    pub no_envelope: bool,
 }

@@ -601,7 +601,7 @@ Output schema: see `docs/SCHEMA.md` §8.
 
 ```bash
 xin watch [--since <state>] [--max N] [--page TOKEN] [--checkpoint FILE] \
-  [--interval-ms MS] [--jitter-ms MS] [--hydrate] [--once] [--pretty]
+  [--interval-ms MS] [--jitter-ms MS] [--hydrate] [--once] [--pretty] [--no-envelope]
 ```
 
 Start cursor resolution order:
@@ -621,6 +621,9 @@ Notes:
 - `{"type":"email.change", ...}`: one event per changed email id.
 - `{"type":"email.hydrated", ...}`: only when `--hydrate` is set.
 - Ctrl-C: emits `{"type":"stopped","reason":"ctrl_c"}` and exits.
+
+By default, after the stream ends, xin prints the standard JSON envelope as the final line.
+Use `--no-envelope` for a pure stream (NDJSON-only) output.
 
 For the detailed event schema, see `docs/SCHEMA.md` §8.3.
 
