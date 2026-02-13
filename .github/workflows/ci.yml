@@ -44,7 +44,7 @@ jobs:
           sleep 10
 
       - name: Build xin
-        run: cargo build --release
+        run: cargo build
 
       - name: Run smoke test
         working-directory: tests/feature/stalwart
