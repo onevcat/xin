@@ -129,7 +129,15 @@ async fn page_token_mismatch_is_a_usage_error_and_does_not_hit_query_endpoint() 
     let out2 = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["search", "--max", "3", "--page", &tok, "--filter-json", "{}"])
+        .args([
+            "search",
+            "--max",
+            "3",
+            "--page",
+            &tok,
+            "--filter-json",
+            "{}",
+        ])
         .output()
         .expect("run");
 
@@ -149,7 +157,10 @@ async fn page_token_mismatch_is_a_usage_error_and_does_not_hit_query_endpoint() 
         .and_then(|e| e.get("message"))
         .and_then(|m| m.as_str())
         .unwrap_or("");
-    assert!(msg.contains("page token does not match args"), "message={msg}");
+    assert!(
+        msg.contains("page token does not match args"),
+        "message={msg}"
+    );
 
     // Assert we only hit Email/query once total.
     let requests = server.received_requests().await.expect("requests");

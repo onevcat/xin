@@ -901,11 +901,14 @@ impl Backend {
         &self,
         since_state: &str,
         max_changes: Option<usize>,
-    ) -> Result<(
-        jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>,
-        Vec<Email>,
-        Vec<Email>,
-    ), XinErrorOut> {
+    ) -> Result<
+        (
+            jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>,
+            Vec<Email>,
+            Vec<Email>,
+        ),
+        XinErrorOut,
+    > {
         let client = self.j.client();
         let session = client.session();
         let api_url = session.api_url().to_string();
@@ -1019,7 +1022,9 @@ impl Backend {
                 jmap: None,
             })?;
 
-        let mut changes: Option<jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>> = None;
+        let mut changes: Option<
+            jmap_client::core::changes::ChangesResponse<Email<jmap_client::Get>>,
+        > = None;
         let mut created_get: Option<jmap_client::core::response::EmailGetResponse> = None;
         let mut updated_get: Option<jmap_client::core::response::EmailGetResponse> = None;
         let mut jmap_error: Option<Value> = None;

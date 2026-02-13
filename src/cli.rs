@@ -689,4 +689,40 @@ pub struct HistoryArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct WatchArgs {}
+pub struct WatchArgs {
+    /// Start watching from this state (like history --since).
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// Max changes per poll.
+    #[arg(long = "max")]
+    pub max: Option<usize>,
+
+    /// Page token (source of truth for since/max).
+    #[arg(long)]
+    pub page: Option<String>,
+
+    /// When set, also fetch a summary for changed emails (created/updated) via Email/get.
+    #[arg(long)]
+    pub hydrate: bool,
+
+    /// Poll interval in milliseconds when there are no changes.
+    #[arg(long, default_value_t = 8000)]
+    pub interval_ms: u64,
+
+    /// Random jitter added to interval (milliseconds).
+    #[arg(long, default_value_t = 600)]
+    pub jitter_ms: u64,
+
+    /// Persist the latest page token to this file (and resume from it if present).
+    #[arg(long)]
+    pub checkpoint: Option<std::path::PathBuf>,
+
+    /// Exit after reaching a stable point (no more changes).
+    #[arg(long)]
+    pub once: bool,
+
+    /// Human-friendly output (default is NDJSON for agents).
+    #[arg(long)]
+    pub pretty: bool,
+}

@@ -514,9 +514,14 @@ fn assert_one(v: &serde_json::Value, a: &Assertion, ctx: &Context) -> Result<(),
         let path_exists = got_opt.is_some() && !got_opt.unwrap().is_null();
         if exists != path_exists {
             if exists {
-                return Err(format!("expected path to exist, but it does not or is null"));
+                return Err(format!(
+                    "expected path to exist, but it does not or is null"
+                ));
             } else {
-                return Err(format!("expected path to not exist, but found: {:?}", got_opt.unwrap()));
+                return Err(format!(
+                    "expected path to not exist, but found: {:?}",
+                    got_opt.unwrap()
+                ));
             }
         }
         // exists assertion passed; if no other assertions, we're done

@@ -537,7 +537,10 @@ async fn history_hydrate_fetches_created_and_updated_summaries_in_one_request() 
 
     // Ensure only one POST occurred.
     let requests = server.received_requests().await.expect("requests");
-    let posts = requests.iter().filter(|r| r.method.as_str() == "POST").count();
+    let posts = requests
+        .iter()
+        .filter(|r| r.method.as_str() == "POST")
+        .count();
     assert_eq!(posts, 1);
 }
 
