@@ -44,6 +44,8 @@ jobs:
         working-directory: tests/feature/stalwart
         run: |
           chmod +x scripts/*.sh
+          # Clean any leftover state from previous runs (owned by root)
+          sudo rm -rf tests/feature/stalwart/.state || true
           ./scripts/up.sh
           ./scripts/seed.sh
 
