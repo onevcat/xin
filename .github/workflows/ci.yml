@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run unit tests
+        run: cargo test --all-targets --all-features
+
+      - name: Build
+        run: cargo build --release --verbose
+
+  smoke:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Set up Docker
+        run: sudo apt-get update && sudo apt-get install -y docker.io docker-compose
+
+      - name: Build xin
+        run: cargo build --release
+
+      - name: Start Stalwart
+        working-directory: tests/feature/stalwart
+        run: |
+          chmod +x scripts/up.sh
+          ./scripts/up.sh
+          sleep 5
+
+      - name: Run smoke test
+        working-directory: tests/feature/stalwart
+        run: chmod +x scripts/check.sh && ./scripts/check.sh
+
+      - name: Stop Stalwart
+        working-directory: tests/feature/stalwart
+        run: ./scripts/down.sh || true
