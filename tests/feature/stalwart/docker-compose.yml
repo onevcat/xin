@@ -2,6 +2,9 @@ services:
   stalwart:
     image: stalwartlabs/stalwart:latest
     container_name: xin-stalwart
+    # Run as the host user so the bind-mounted .state directory is removable by the test runner.
+    # (GitHub Actions Linux runners otherwise end up with root-owned files under .state.)
+    user: "${STALWART_UID:-1000}:${STALWART_GID:-1000}"
     environment:
       # Stalwart uses this to locate its data directory in our config.
       STALWART_PATH: /opt/stalwart

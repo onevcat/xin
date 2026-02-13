@@ -18,7 +18,16 @@ export XIN_BASIC_PASS="$PASS"
 # Minimal connectivity check: should succeed even with empty inbox.
 OUT="$("$ROOT_DIR/target/debug/xin" messages search --filter-json '{"text":"xin-smoke"}' --max 1)"
 
-echo "$OUT" | /usr/bin/grep -q '"ok": true'
-echo "$OUT" | /usr/bin/grep -q '"command": "messages.search"'
+if ! echo "$OUT" | /usr/bin/grep -q '"ok": true'; then
+  echo "Smoke check failed: expected ok=true. Output:" >&2
+  echo "$OUT" >&2
+  exit 1
+fi
+
+if ! echo "$OUT" | /usr/bin/grep -q '"command": "messages.search"'; then
+  echo "Smoke check failed: expected command=messages.search. Output:" >&2
+  echo "$OUT" >&2
+  exit 1
+fi
 
 echo "OK: xin can connect to Stalwart via Basic auth (JMAP)."

@@ -34,22 +34,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Start Stalwart
-        working-directory: tests/feature/stalwart
-        run: |
-          docker compose up -d
-          sleep 10
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build xin
-        run: cargo build --release
+      - name: Install deps (curl/python/nc)
+        run: sudo apt-get update && sudo apt-get install -y curl python3 netcat-openbsd
 
-      - name: Run smoke test
-        working-directory: tests/feature/stalwart
-        run: chmod +x scripts/check.sh && ./scripts/check.sh
+      - name: Run feature smoke (Stalwart)
+        # xin-feature manages Stalwart lifecycle itself (up/down + optional fresh resets) based on cases.
+        run: cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases --all
+
+      - name: Dump Stalwart logs (on failure)
+        if: failure()
+        run: docker logs xin-stalwart || true
 
       - name: Stop Stalwart
+        if: always()
         working-directory: tests/feature/stalwart
-        run: docker compose down || true
+        run: ./scripts/down.sh || true
