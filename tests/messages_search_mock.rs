@@ -112,7 +112,10 @@ async fn messages_search_forces_collapse_threads_false_and_emits_search_shape() 
 
     let v: serde_json::Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("messages.search"));
+    assert_eq!(
+        v.get("command").and_then(|v| v.as_str()),
+        Some("messages.search")
+    );
 
     let items = v
         .get("data")
@@ -122,6 +125,12 @@ async fn messages_search_forces_collapse_threads_false_and_emits_search_shape() 
         .unwrap_or_default();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].get("emailId").and_then(|v| v.as_str()), Some("m1"));
-    assert_eq!(items[0].get("threadId").and_then(|v| v.as_str()), Some("t1"));
-    assert_eq!(items[0].get("unread").and_then(|v| v.as_bool()), Some(false));
+    assert_eq!(
+        items[0].get("threadId").and_then(|v| v.as_str()),
+        Some("t1")
+    );
+    assert_eq!(
+        items[0].get("unread").and_then(|v| v.as_bool()),
+        Some(false)
+    );
 }

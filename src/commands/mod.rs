@@ -8,6 +8,7 @@ mod labels;
 mod organize;
 mod read;
 mod send;
+mod watch;
 
 pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
     let account = cli.account.clone();
@@ -121,6 +122,7 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         },
 
         Command::History(args) => history::history(account.clone(), args).await,
+        Command::Watch(args) => watch::watch(account.clone(), args).await,
 
         _ => {
             let (command, _details) = command_name(&cli.command);

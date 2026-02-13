@@ -48,14 +48,14 @@ fn help_mentions_key_commands() {
 #[test]
 fn default_output_is_json_envelope() {
     // Pick an unimplemented command that does not require config/env.
-    let (status, v) = run(&["watch"]);
+    let (status, v) = run(&["url"]);
 
     // main() forces exit code 1 when ok=false.
     assert_eq!(status.code(), Some(1));
 
     assert_eq!(v.get("schemaVersion").and_then(|v| v.as_str()), Some("0.1"));
     assert_eq!(v.get("ok").and_then(|v| v.as_bool()), Some(false));
-    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("watch"));
+    assert_eq!(v.get("command").and_then(|v| v.as_str()), Some("url"));
     assert_eq!(
         v.get("error")
             .and_then(|e| e.get("kind"))

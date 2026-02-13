@@ -1,4 +1,4 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
 
 use crate::backend::Backend;
@@ -8,20 +8,20 @@ use crate::output::{Envelope, Meta};
 use crate::schema;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-struct PageToken {
+pub(crate) struct PageToken {
     #[serde(rename = "sinceState")]
-    since_state: String,
+    pub(crate) since_state: String,
 
     #[serde(rename = "maxChanges")]
-    max_changes: usize,
+    pub(crate) max_changes: usize,
 }
 
-fn encode_page_token(token: &PageToken) -> String {
+pub(crate) fn encode_page_token(token: &PageToken) -> String {
     let bytes = serde_json::to_vec(token).expect("token json");
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn decode_page_token(s: &str) -> Result<PageToken, XinErrorOut> {
+pub(crate) fn decode_page_token(s: &str) -> Result<PageToken, XinErrorOut> {
     let bytes = URL_SAFE_NO_PAD
         .decode(s)
         .map_err(|e| XinErrorOut::usage(format!("invalid page token: {e}")))?;
@@ -108,7 +108,10 @@ pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Va
     }
 
     let (mut resp, hydrated_created, hydrated_updated) = if args.hydrate {
-        match backend.email_changes_hydrate(&since_state, Some(used_max)).await {
+        match backend
+            .email_changes_hydrate(&since_state, Some(used_max))
+            .await
+        {
             Ok((r, created, updated)) => (r, Some(created), Some(updated)),
             Err(e) => return Envelope::err(command_name, account, e),
         }

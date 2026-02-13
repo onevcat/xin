@@ -202,12 +202,7 @@ async fn trash_whole_thread_dry_run_does_not_call_email_set() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args([
-            "--dry-run",
-            "trash",
-            "--whole-thread",
-            "m1",
-        ])
+        .args(["--dry-run", "trash", "--whole-thread", "m1"])
         .output()
         .expect("run");
 
