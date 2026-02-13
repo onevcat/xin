@@ -49,7 +49,7 @@ xin --plain watch --checkpoint /tmp/xin.watch.token
 > cargo run --bin xin --
 > ```
 
-### 1) 查一下我现在的收件箱有哪些邮件（list inbox）
+### 1) List what's currently in my inbox
 
 ```bash
 # Human-friendly
@@ -59,7 +59,7 @@ xin --plain messages search "in:inbox" --max 50
 xin messages search "in:inbox" --max 50
 ```
 
-### 2) 不需要的邮件就都归档（archive）
+### 2) Archive emails I don't need
 
 ```bash
 # Archive ONE message
@@ -74,7 +74,7 @@ xin messages search "in:inbox" --max 200 --json \
   | xargs -n 50 sh -c 'xin batch modify "$@" --remove inbox --add archive' _
 ```
 
-### 3) 看一下某封邮件具体的内容（read one email）
+### 3) Read one email (details)
 
 ```bash
 # Full content
@@ -84,7 +84,7 @@ xin --plain get <emailId> --format full
 xin --plain get <emailId> --format metadata
 ```
 
-### 4) 帮我回复一下，说 XXXX（reply / send）
+### 4) Reply (send) with a short message
 
 ```bash
 # Minimal reply (v0): send a new message to the original sender.
