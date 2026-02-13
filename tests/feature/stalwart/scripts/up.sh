@@ -25,6 +25,10 @@ port_free() {
 need_cmd docker
 need_cmd /usr/bin/nc
 
+# Ensure the bind-mounted state directory stays owned by the current user (important on Linux CI).
+export STALWART_UID="$(id -u)"
+export STALWART_GID="$(id -g)"
+
 port_free "$HTTP_PORT"
 port_free "$SMTP_PORT"
 
