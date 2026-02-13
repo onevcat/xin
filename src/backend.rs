@@ -760,7 +760,13 @@ impl Backend {
         request
             .send_single::<jmap_client::core::response::EmailSetResponse>()
             .await
-            .map(|_| ())
+            .and_then(|mut r| {
+                // Ensure each requested id is actually updated; otherwise surface notUpdated.
+                for id in email_ids {
+                    r.updated(id).map(|_| ())?;
+                }
+                Ok(())
+            })
             .map_err(|e| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
                 message: format!("Email/set(update) failed: {e}"),

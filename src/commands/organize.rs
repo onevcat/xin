@@ -410,17 +410,12 @@ pub async fn thread_archive(
         }
     };
 
-    let archive_id = resolve_mailbox_id("archive", &mailboxes);
-
+    // Archive sugar mirrors Gmail semantics: remove Inbox membership.
+    // We intentionally do NOT add an "Archive" mailbox, even if one exists.
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(inbox_id.clone());
     let mut summary = ChangeSummary::default();
     summary.removed_mailboxes.push(inbox_id);
-
-    if let Some(aid) = archive_id {
-        plan.add_mailboxes.push(aid.clone());
-        summary.added_mailboxes.push(aid);
-    }
 
     thread_sugar(
         &backend,
@@ -644,17 +639,12 @@ pub async fn archive(
             );
         }
     };
-    let archive_id = resolve_mailbox_id("archive", &mailboxes);
-
+    // Archive sugar mirrors Gmail semantics: remove Inbox membership.
+    // We intentionally do NOT add an "Archive" mailbox, even if one exists.
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(inbox_id.clone());
     let mut summary = ChangeSummary::default();
     summary.removed_mailboxes.push(inbox_id);
-
-    if let Some(aid) = archive_id {
-        plan.add_mailboxes.push(aid.clone());
-        summary.added_mailboxes.push(aid);
-    }
 
     if args.whole_thread {
         let thread_id = match backend
