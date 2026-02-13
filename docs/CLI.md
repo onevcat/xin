@@ -29,8 +29,26 @@ xin is a **standards client**:
 
 - `--help`, `-h`
 - Output:
-  - `--json` : JSON to stdout (default recommended)
-  - `--plain`: stable, parseable text (TSV-like). **Optional**; can be added later.
+  - `--json` : JSON to stdout (**stable contract**, default recommended)
+  - `--plain`: human-friendly plain text
+
+### `--plain` output conventions (v0)
+
+`--plain` is **not** a stability contract. The JSON schema (`docs/SCHEMA.md`) remains the only stable, agent-first contract.
+
+However, `--plain` follows a consistent set of conventions to remain pleasant for humans and usable in shells:
+
+- Lists are **TSV** (tab-separated), one record per line.
+- No ANSI color codes.
+- Long fields (e.g. subject/snippet) may be truncated.
+- For commands with multiple output “modes”:
+  - list-like output → TSV
+  - detail-like output → readable block
+
+Planned first-wave commands to support `--plain`:
+- `search`, `messages search`, `get`, `thread attachments`, `attachment`, `labels list`, `mailboxes list`, `history`, `watch`
+
+If you need stable parsing, use `--json`.
 - Safety:
   - `--force`: skip confirmations for destructive commands
   - `--no-input`: never prompt; fail instead
