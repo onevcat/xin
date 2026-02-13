@@ -46,6 +46,7 @@ impl RuntimeConfig {
         self.auth.credentials()
     }
 
+    #[allow(dead_code)]
     pub fn from_env() -> Result<Self, XinErrorOut> {
         resolve_runtime_config(None).map(|r| r.config)
     }
