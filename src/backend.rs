@@ -727,6 +727,7 @@ impl Backend {
             })
     }
 
+    #[allow(dead_code)]
     pub async fn update_draft_email(
         &self,
         email_id: &str,
