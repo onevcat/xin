@@ -50,6 +50,30 @@ fn pretty_line(v: &Value) {
     let _ = out.flush();
 }
 
+fn now_nanos() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0)
+}
+
+fn compute_wait_ms(interval_ms: u64, jitter_ms: u64, now_nanos: u64) -> u64 {
+    let jitter = if jitter_ms == 0 {
+        0
+    } else {
+        now_nanos % (jitter_ms + 1)
+    };
+    interval_ms.saturating_add(jitter)
+}
+
+async fn sleep_with<F, Fut>(dur: std::time::Duration, sleeper: F)
+where
+    F: FnOnce(std::time::Duration) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    sleeper(dur).await
+}
+
 pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value> {
     let command_name = "watch";
 
@@ -237,22 +261,12 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
         }
 
         // Sleep before next poll.
-        let jitter = if args.jitter_ms == 0 {
-            0
-        } else {
-            // Derive a pseudo-random jitter without extra deps.
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.subsec_nanos() as u64)
-                .unwrap_or(0);
-            nanos % (args.jitter_ms + 1)
-        };
-        let wait = args.interval_ms.saturating_add(jitter);
+        let wait = compute_wait_ms(args.interval_ms, args.jitter_ms, now_nanos());
 
         // Allow Ctrl-C to exit quickly.
-        let sleep_fut = tokio::time::sleep(std::time::Duration::from_millis(wait));
+        let dur = std::time::Duration::from_millis(wait);
         tokio::select! {
-            _ = sleep_fut => {},
+            _ = sleep_with(dur, tokio::time::sleep) => {},
             _ = tokio::signal::ctrl_c() => {
                 emit(&json!({"type":"stopped","reason":"ctrl_c"}));
                 break;
@@ -261,4 +275,47 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
     }
 
     Envelope::ok(command_name, account, json!({"ok": true}), Meta::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compute_wait_ms_respects_interval_and_jitter_bounds() {
+        let interval = 8000;
+        let jitter = 600;
+
+        // now_nanos=0 => jitter=0
+        assert_eq!(compute_wait_ms(interval, jitter, 0), 8000);
+
+        // now_nanos=jitter => jitter=jitter
+        assert_eq!(compute_wait_ms(interval, jitter, jitter), 8600);
+
+        // always within bounds
+        for n in [1, 123, 999_999, 42_424_242] {
+            let w = compute_wait_ms(interval, jitter, n);
+            assert!(w >= interval);
+            assert!(w <= interval + jitter);
+        }
+    }
+
+    #[tokio::test]
+    async fn sleep_with_allows_injection() {
+        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+
+        sleep_with(std::time::Duration::from_millis(12), move |dur| {
+            let called3 = called2.clone();
+            async move {
+                called3.store(true, Ordering::SeqCst);
+                assert_eq!(dur, std::time::Duration::from_millis(12));
+            }
+        })
+        .await;
+
+        assert!(called.load(Ordering::SeqCst));
+    }
 }
