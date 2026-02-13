@@ -410,12 +410,26 @@ pub async fn thread_archive(
         }
     };
 
-    // Archive sugar mirrors Gmail semantics: remove Inbox membership.
-    // We intentionally do NOT add an "Archive" mailbox, even if one exists.
+    let archive_id = resolve_mailbox_id("archive", &mailboxes);
+
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(inbox_id.clone());
     let mut summary = ChangeSummary::default();
-    summary.removed_mailboxes.push(inbox_id);
+    summary.removed_mailboxes.push(inbox_id.clone());
+
+    match archive_id {
+        Some(aid) => {
+            plan.add_mailboxes.push(aid.clone());
+            summary.added_mailboxes.push(aid);
+        }
+        None => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::config("archive mailbox not found".to_string()),
+            );
+        }
+    }
 
     thread_sugar(
         &backend,
@@ -639,12 +653,26 @@ pub async fn archive(
             );
         }
     };
-    // Archive sugar mirrors Gmail semantics: remove Inbox membership.
-    // We intentionally do NOT add an "Archive" mailbox, even if one exists.
+    let archive_id = resolve_mailbox_id("archive", &mailboxes);
+
     let mut plan = ModifyPlan::default();
     plan.remove_mailboxes.push(inbox_id.clone());
     let mut summary = ChangeSummary::default();
-    summary.removed_mailboxes.push(inbox_id);
+    summary.removed_mailboxes.push(inbox_id.clone());
+
+    match archive_id {
+        Some(aid) => {
+            plan.add_mailboxes.push(aid.clone());
+            summary.added_mailboxes.push(aid);
+        }
+        None => {
+            return Envelope::err(
+                command_name,
+                account,
+                XinErrorOut::config("archive mailbox not found".to_string()),
+            );
+        }
+    }
 
     if args.whole_thread {
         let thread_id = match backend
