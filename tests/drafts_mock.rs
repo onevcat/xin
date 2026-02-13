@@ -1141,16 +1141,16 @@ async fn drafts_delete_removes_membership_from_drafts_mailbox() {
         "expected no destroy in Email/set: {body_str}"
     );
     assert!(
-        body_str.contains("mailboxIds/mb1") && body_str.contains("false"),
-        "expected mailboxIds/mb1 removal in Email/set: {body_str}"
+        body_str.contains("\"mailboxIds/mb1\":null"),
+        "expected mailboxIds/mb1 removal (null) in Email/set: {body_str}"
     );
     assert!(
         body_str.contains("mailboxIds/mbTrash") && body_str.contains("true"),
         "expected mailboxIds/mbTrash add in Email/set: {body_str}"
     );
     assert!(
-        body_str.contains("keywords/$draft") && body_str.contains("false"),
-        "expected keywords/$draft removal in Email/set: {body_str}"
+        body_str.contains("\"keywords/$draft\":null"),
+        "expected keywords/$draft removal (null) in Email/set: {body_str}"
     );
 }
 

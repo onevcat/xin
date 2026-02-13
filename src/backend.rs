@@ -727,52 +727,195 @@ impl Backend {
             })
     }
 
+
     pub async fn modify_emails(
         &self,
         email_ids: &[String],
         plan: &ModifyPlan,
     ) -> Result<(), XinErrorOut> {
-        let mut request = self.j.client().build();
-        let set = request.set_email();
+        // NOTE: For Email/set update patches, JMAP expects mailboxIds/keywords map entries
+        // to be set to `true` (add) or `null` (remove). Some servers reject `false`.
+
+        let client = self.j.client();
+        let session = client.session();
+        let api_url = session.api_url().to_string();
+        let account_id = client.default_account_id().to_string();
+
+        let mut update_obj = serde_json::Map::new();
 
         for id in email_ids {
-            let update = set.update(id.to_string());
+            let mut patch = serde_json::Map::new();
 
             if let Some(repl) = &plan.replace_mailboxes {
-                update.mailbox_ids(repl.clone());
+                let mut m = serde_json::Map::new();
+                for mb in repl {
+                    m.insert(mb.clone(), Value::Bool(true));
+                }
+                patch.insert("mailboxIds".to_string(), Value::Object(m));
             } else {
                 for mb in &plan.add_mailboxes {
-                    update.mailbox_id(mb, true);
+                    patch.insert(format!("mailboxIds/{mb}"), Value::Bool(true));
                 }
                 for mb in &plan.remove_mailboxes {
-                    update.mailbox_id(mb, false);
+                    patch.insert(format!("mailboxIds/{mb}"), Value::Null);
                 }
             }
 
             for kw in &plan.add_keywords {
-                update.keyword(kw, true);
+                patch.insert(format!("keywords/{kw}"), Value::Bool(true));
             }
             for kw in &plan.remove_keywords {
-                update.keyword(kw, false);
+                patch.insert(format!("keywords/{kw}"), Value::Null);
+            }
+
+            update_obj.insert(id.clone(), Value::Object(patch));
+        }
+
+        let request_body = json!({
+            "using": [
+                "urn:ietf:params:jmap:core",
+                "urn:ietf:params:jmap:mail"
+            ],
+            "methodCalls": [
+                ["Email/set", {"accountId": account_id, "update": Value::Object(update_obj)}, "e0"]
+            ]
+        });
+
+        let http = reqwest::Client::builder()
+            .timeout(client.timeout())
+            .default_headers(client.headers().clone())
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("failed to build http client: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        let resp = http
+            .post(api_url)
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("request failed: {e}"),
+                http: None,
+                jmap: None,
+            })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(XinErrorOut {
+                kind: "httpError".to_string(),
+                message: format!("server returned {status}: {text}"),
+                http: Some(json!({"status": status.as_u16()})),
+                jmap: None,
+            });
+        }
+
+        let v: Value = resp.json().await.map_err(|e| XinErrorOut {
+            kind: "httpError".to_string(),
+            message: format!("invalid json response: {e}"),
+            http: None,
+            jmap: None,
+        })?;
+
+        let mrs = v
+            .get("methodResponses")
+            .and_then(|x| x.as_array())
+            .ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "missing methodResponses".to_string(),
+                http: None,
+                jmap: Some(v.clone()),
+            })?;
+
+        // Find Email/set response.
+        let mut set_resp: Option<&Value> = None;
+        for mr in mrs {
+            let arr = mr.as_array().ok_or_else(|| XinErrorOut {
+                kind: "jmapRequestError".to_string(),
+                message: "invalid methodResponses entry".to_string(),
+                http: None,
+                jmap: Some(v.clone()),
+            })?;
+
+            match arr.get(0).and_then(|x| x.as_str()) {
+                Some("Email/set") => {
+                    set_resp = arr.get(1);
+                    break;
+                }
+                Some("error") => {
+                    let err = arr.get(1).cloned().unwrap_or(Value::Null);
+                    return Err(XinErrorOut {
+                        kind: "jmapRequestError".to_string(),
+                        message: "JMAP request error".to_string(),
+                        http: None,
+                        jmap: Some(err),
+                    });
+                }
+                _ => {}
             }
         }
 
-        request
-            .send_single::<jmap_client::core::response::EmailSetResponse>()
-            .await
-            .and_then(|mut r| {
-                // Ensure each requested id is actually updated; otherwise surface notUpdated.
-                for id in email_ids {
-                    r.updated(id).map(|_| ())?;
-                }
-                Ok(())
-            })
-            .map_err(|e| XinErrorOut {
+        let set_resp = set_resp.ok_or_else(|| XinErrorOut {
+            kind: "jmapRequestError".to_string(),
+            message: "missing Email/set response".to_string(),
+            http: None,
+            jmap: Some(v.clone()),
+        })?;
+
+        if let Some(not_updated) = set_resp.get("notUpdated").and_then(|x| x.as_object()) {
+            if !not_updated.is_empty() {
+                let (id, err) = not_updated.iter().next().unwrap();
+                let ty = err.get("type").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let props = err.get("properties").cloned().unwrap_or(Value::Null);
+                let desc = err.get("description").and_then(|v| v.as_str()).unwrap_or("");
+
+                let msg = if desc.is_empty() {
+                    format!("Email/set(update) failed: notUpdated {id}: {ty}")
+                } else {
+                    format!("Email/set(update) failed: notUpdated {id}: {ty}: {desc}")
+                };
+
+                return Err(XinErrorOut {
+                    kind: "jmapRequestError".to_string(),
+                    message: if props.is_null() {
+                        msg
+                    } else {
+                        format!("{msg} (properties: {props})")
+                    },
+                    http: None,
+                    jmap: Some(err.clone()),
+                });
+            }
+        }
+
+        let updated = set_resp
+            .get("updated")
+            .and_then(|x| x.as_object())
+            .ok_or_else(|| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
-                message: format!("Email/set(update) failed: {e}"),
+                message: "Email/set(update) missing updated".to_string(),
                 http: None,
-                jmap: None,
-            })
+                jmap: Some(set_resp.clone()),
+            })?;
+
+        for id in email_ids {
+            if !updated.contains_key(id) {
+                return Err(XinErrorOut {
+                    kind: "jmapRequestError".to_string(),
+                    message: format!("Email/set(update) missing updated entry for {id}"),
+                    http: None,
+                    jmap: Some(set_resp.clone()),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn thread_email_ids(
