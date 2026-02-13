@@ -1,13 +1,18 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser, Debug)]
-#[command(name = "xin", version, about = "Agent-first JMAP CLI")]
+#[command(
+    name = "xin",
+    version,
+    about = "Agent-first JMAP CLI (Fastmail-first)",
+    after_help = "Examples:\n  xin config init\n  xin auth set-token <TOKEN>\n  xin search \"from:alice seen:false\" --max 10\n  xin --plain search \"subject:invoice\" --max 5\n  xin get <emailId> --format full\n  xin watch --checkpoint /tmp/xin.watch.token\n\nUse `xin <command> --help` for more examples and flags.\nJSON (`--json`) is the stable contract; `--plain` is for humans."
+)]
 pub struct Cli {
     /// Output JSON to stdout (default).
     #[arg(long, global = true, conflicts_with = "plain")]
     pub json: bool,
 
-    /// Output stable plain text (TBD).
+    /// Output plain text for humans (TSV/block). JSON is the stable contract.
     #[arg(long, global = true, conflicts_with = "json")]
     pub plain: bool,
 
@@ -134,6 +139,7 @@ pub enum Command {
 // --- Read
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin search \"from:alice seen:false\" --max 10\n  xin search --filter-json '{\"text\":\"hello\"}' --max 5\n  xin --plain search \"subject:invoice\" --max 5\n\nTips:\n  - Quote multi-term queries.\n  - Use --filter-json for precise server-owned filters (accepts @/path.json).")]
 pub struct SearchArgs {
     #[arg(value_name = "QUERY", allow_hyphen_values = true)]
     pub query: Option<String>,
@@ -168,6 +174,7 @@ pub enum MessagesCommand {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin messages search \"from:alice\" --max 20\n  xin messages search --filter-json @filter.json --max 50\n  xin --plain messages search \"subject:meeting\" --max 5")]
 pub struct MessagesSearchArgs {
     #[arg(value_name = "QUERY", allow_hyphen_values = true)]
     pub query: Option<String>,
@@ -183,6 +190,7 @@ pub struct MessagesSearchArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin get <emailId>\n  xin get <emailId> --format full\n  xin --plain get <emailId> --format full\n  xin get <emailId> --headers message-id,in-reply-to\n\nNotes:\n  - --format metadata is fast and stable for agents.\n  - --format full may include truncation warnings in meta.warnings.")]
 pub struct GetArgs {
     pub email_id: String,
 
@@ -217,6 +225,7 @@ pub enum ThreadCommand {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin thread get <threadId>\n  xin thread get <threadId> --full")]
 pub struct ThreadGetArgs {
     pub thread_id: String,
 
@@ -225,6 +234,7 @@ pub struct ThreadGetArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin thread attachments <threadId>\n  xin --plain thread attachments <threadId>")]
 pub struct ThreadAttachmentsArgs {
     pub thread_id: String,
 }
@@ -278,6 +288,7 @@ pub struct ThreadDeleteArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin attachment <emailId> <blobId>\n  xin attachment <emailId> <blobId> --out ./file.bin\n  xin --plain attachment <emailId> <blobId>")]
 pub struct AttachmentArgs {
     pub email_id: String,
     pub blob_id: String,
@@ -495,6 +506,7 @@ pub struct IdentitiesGetArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\"\n  xin send --to bob@example.com --subject \"Hello\" --text @body.txt --attach ./a.pdf\n  xin send --to bob@example.com --subject \"Hello\" --body-html @body.html\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\" --identity alice@example.com")]
 pub struct SendArgs {
     /// Recipient(s). Can be specified multiple times.
     #[arg(long, required = true, num_args = 1..)]
@@ -726,6 +738,7 @@ pub struct AuthSetTokenArgs {
 // --- History / watch
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin history\n  xin history --since <state>\n  xin history --since <state> --hydrate\n\nPaging:\n  - If meta.nextPage is set, continue with: xin history --page <TOKEN>")]
 pub struct HistoryArgs {
     #[arg(long)]
     pub since: Option<String>,
@@ -742,6 +755,7 @@ pub struct HistoryArgs {
 }
 
 #[derive(Args, Debug)]
+#[command(after_help = "Examples:\n  xin watch --checkpoint /tmp/xin.watch.token\n  xin watch --since <state> --once\n  xin --plain watch --checkpoint /tmp/xin.watch.token\n\nNotes:\n  - Default output is NDJSON stream for agents.\n  - Use --no-envelope (or --plain) for stream-only output.")]
 pub struct WatchArgs {
     /// Start watching from this state (like history --since).
     #[arg(long)]
