@@ -68,6 +68,9 @@ pub fn print_envelope<T>(env: &Envelope<T>)
 where
     T: Serialize,
 {
-    // Phase 1: always JSON.
     println!("{}", serde_json::to_string_pretty(env).expect("serialize"));
+}
+
+pub fn print_plain(env: &Envelope<serde_json::Value>) {
+    println!("{}", crate::plain::render(env));
 }

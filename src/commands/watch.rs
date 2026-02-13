@@ -50,6 +50,12 @@ fn pretty_line(v: &Value) {
     let _ = out.flush();
 }
 
+fn plain_line(s: &str) {
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{}", s);
+    let _ = out.flush();
+}
+
 fn now_nanos() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -74,16 +80,24 @@ where
     sleeper(dur).await
 }
 
-pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value> {
+pub async fn watch(account: Option<String>, args: &WatchArgs, plain: bool) -> Envelope<Value> {
     let command_name = "watch";
 
-    let emit = if args.pretty { pretty_line } else { json_line };
+    // Emitter: JSON (default) or plain text.
+    let emit_json = if args.pretty { pretty_line } else { json_line };
+    let emit_plain = |line: &str| plain_line(line);
+
     let emit_error = |e: &XinErrorOut| {
+        if plain {
+            emit_plain(&format!("ERROR\t{}\t{}", e.kind, e.message));
+            return;
+        }
+
         if args.no_envelope {
             let v = serde_json::to_value(e).unwrap_or_else(
                 |_| json!({"kind":"unknown","message":"failed to serialize error"}),
             );
-            emit(&json!({"type":"error","error": v}));
+            emit_json(&json!({"type":"error","error": v}));
         }
     };
 
@@ -164,11 +178,18 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
     }
 
     // Initial ready event (useful for agents).
-    emit(&json!({
-        "type": "ready",
-        "sinceState": since_state,
-        "maxChanges": used_max,
-    }));
+    if plain {
+        emit_plain(&format!(
+            "READY\tsinceState={}\tmaxChanges={}",
+            since_state, used_max
+        ));
+    } else {
+        emit_json(&json!({
+            "type": "ready",
+            "sinceState": since_state,
+            "maxChanges": used_max,
+        }));
+    }
 
     // (no RNG dependency; jitter derived from system time)
 
@@ -203,55 +224,87 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
 
         // Emit events.
         if !created.is_empty() || !updated.is_empty() || !destroyed.is_empty() {
-            emit(&json!({
-                "type": "tick",
-                "sinceState": since_state,
-                "newState": new_state,
-                "hasMoreChanges": has_more,
-                "counts": {
-                    "created": created.len(),
-                    "updated": updated.len(),
-                    "destroyed": destroyed.len()
+            if plain {
+                emit_plain(&format!(
+                    "TICK\tsinceState={}\tnewState={}\tcreated={}\tupdated={}\tdestroyed={}\thasMoreChanges={}",
+                    since_state,
+                    new_state,
+                    created.len(),
+                    updated.len(),
+                    destroyed.len(),
+                    has_more
+                ));
+
+                for id in &created {
+                    emit_plain(&format!("CREATED\t{}\tnewState={}", id, new_state));
                 }
-            }));
+                for id in &updated {
+                    emit_plain(&format!("UPDATED\t{}\tnewState={}", id, new_state));
+                }
+                for id in &destroyed {
+                    emit_plain(&format!("DESTROYED\t{}\tnewState={}", id, new_state));
+                }
 
-            for id in created {
-                emit(&json!({
-                    "type": "email.change",
-                    "changeType": "created",
-                    "id": id,
-                    "newState": new_state
-                }));
-            }
-            for id in updated {
-                emit(&json!({
-                    "type": "email.change",
-                    "changeType": "updated",
-                    "id": id,
-                    "newState": new_state
-                }));
-            }
-            for id in destroyed {
-                emit(&json!({
-                    "type": "email.change",
-                    "changeType": "destroyed",
-                    "id": id,
-                    "newState": new_state
-                }));
-            }
-
-            if let (Some(created_emails), Some(updated_emails)) =
-                (hydrated_created, hydrated_updated)
-            {
-                // Optional hydrated summaries (agent can ignore).
-                emit(&json!({
-                    "type": "email.hydrated",
+                if let (Some(created_emails), Some(updated_emails)) =
+                    (hydrated_created.as_ref(), hydrated_updated.as_ref())
+                {
+                    emit_plain(&format!(
+                        "HYDRATED\tcreated={}\tupdated={}",
+                        created_emails.len(),
+                        updated_emails.len()
+                    ));
+                }
+            } else {
+                emit_json(&json!({
+                    "type": "tick",
+                    "sinceState": since_state,
                     "newState": new_state,
-                    "hydrated": {
-                        "created": crate::schema::email_summary_items(&created_emails),
-                        "updated": crate::schema::email_summary_items(&updated_emails)
+                    "hasMoreChanges": has_more,
+                    "counts": {
+                        "created": created.len(),
+                        "updated": updated.len(),
+                        "destroyed": destroyed.len()
                     }
                 }));
+
+                for id in created {
+                    emit_json(&json!({
+                        "type": "email.change",
+                        "changeType": "created",
+                        "id": id,
+                        "newState": new_state
+                    }));
+                }
+                for id in updated {
+                    emit_json(&json!({
+                        "type": "email.change",
+                        "changeType": "updated",
+                        "id": id,
+                        "newState": new_state
+                    }));
+                }
+                for id in destroyed {
+                    emit_json(&json!({
+                        "type": "email.change",
+                        "changeType": "destroyed",
+                        "id": id,
+                        "newState": new_state
+                    }));
+                }
+
+                if let (Some(created_emails), Some(updated_emails)) =
+                    (hydrated_created, hydrated_updated)
+                {
+                    // Optional hydrated summaries (agent can ignore).
+                    emit_json(&json!({
+                        "type": "email.hydrated",
+                        "newState": new_state,
+                        "hydrated": {
+                            "created": crate::schema::email_summary_items(&created_emails),
+                            "updated": crate::schema::email_summary_items(&updated_emails)
+                        }
+                    }));
+                }
             }
         }
 
@@ -286,7 +339,11 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
         tokio::select! {
             _ = sleep_with(dur, tokio::time::sleep) => {},
             _ = tokio::signal::ctrl_c() => {
-                emit(&json!({"type":"stopped","reason":"ctrl_c"}));
+                if plain {
+                    emit_plain("STOPPED\treason=ctrl_c");
+                } else {
+                    emit_json(&json!({"type":"stopped","reason":"ctrl_c"}));
+                }
                 break;
             }
         }

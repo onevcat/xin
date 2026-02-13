@@ -125,7 +125,7 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         },
 
         Command::History(args) => history::history(account.clone(), args).await,
-        Command::Watch(args) => watch::watch(account.clone(), args).await,
+        Command::Watch(args) => watch::watch(account.clone(), args, cli.plain).await,
 
         Command::Config { command: sub } => match sub {
             ConfigCommand::Init => config_cmd::init().await,
