@@ -34,22 +34,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install deps (curl/python/nc)
+        run: sudo apt-get update && sudo apt-get install -y curl python3 netcat-openbsd
+
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
 
-      - name: Start Stalwart
+      - name: Start + seed Stalwart
         working-directory: tests/feature/stalwart
         run: |
-          docker compose up -d
-          sleep 10
-
-      - name: Build xin
-        run: cargo build
+          chmod +x scripts/*.sh
+          ./scripts/up.sh
+          ./scripts/seed.sh
 
       - name: Run smoke test
         working-directory: tests/feature/stalwart
-        run: chmod +x scripts/check.sh && ./scripts/check.sh
+        run: ./scripts/check.sh
+
+      - name: Dump Stalwart logs (on failure)
+        if: failure()
+        run: docker logs xin-stalwart || true
 
       - name: Stop Stalwart
+        if: always()
         working-directory: tests/feature/stalwart
-        run: docker compose down || true
+        run: ./scripts/down.sh || true
