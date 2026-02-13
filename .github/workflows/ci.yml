@@ -47,9 +47,9 @@ jobs:
           ./scripts/up.sh
           ./scripts/seed.sh
 
-      - name: Run smoke test
-        working-directory: tests/feature/stalwart
-        run: ./scripts/check.sh
+      - name: Run smoke tests (all feature cases)
+        working-directory: /home/runner/work/xin/xin
+        run: cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases --all
 
       - name: Dump Stalwart logs (on failure)
         if: failure()
