@@ -650,6 +650,19 @@ Use `--no-envelope` for a pure stream (NDJSON-only) output.
 
 For the detailed event schema, see `docs/SCHEMA.md` §8.3.
 
+#### `--plain` watch stream
+
+When `--plain` is set, `watch` prints a line-oriented stream suitable for humans and simple tooling:
+
+- `READY\tsinceState=<S>\tmaxChanges=<N>`
+- `TICK\tsinceState=<S0>\tnewState=<S1>\tcreated=<n>\tupdated=<n>\tdestroyed=<n>\thasMoreChanges=<bool>`
+- `CREATED\t<emailId>\tnewState=<S>`
+- `UPDATED\t<emailId>\tnewState=<S>`
+- `DESTROYED\t<emailId>\tnewState=<S>`
+- `HYDRATED\tcreated=<n>\tupdated=<n>` (only when `--hydrate`)
+- `STOPPED\treason=ctrl_c`
+- On errors (when `--no-envelope` or `--plain`): `ERROR\t<kind>\t<message>`
+
 ---
 
 ## 6) gog features that xin will *not* mirror (by default)
