@@ -175,6 +175,17 @@ steps:
       - path: /data/email/keywords/$seen
         exists: false
 
+  - name: create-archive-mailbox
+    say:
+      - "And we can test thread archive and trash"
+    xin:
+      args:
+        - labels
+        - create
+        - Archive
+        - --role
+        - archive
+
   - name: send-to-self-3
     say:
       - "And we can test thread archive and trash"
