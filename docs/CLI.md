@@ -590,10 +590,39 @@ Default: `--max 100`.
 
 Output schema: see `docs/SCHEMA.md` §8.
 
-### 5.2 `xin watch ...` (TBD, PLUS)
+### 5.2 `xin watch ...` (PLUS)
 
-- If provider supports JMAP WebSocket push (RFC 8887), xin can expose a `watch` surface.
-- Otherwise, xin can provide a polling helper (agent can schedule).
+`watch` is a **streaming** helper built on top of JMAP `Email/changes`.
+
+- It is currently **polling-based** (not WebSocket). WebSocket push (RFC 8887) may be added later.
+- Default output is **NDJSON** (one JSON object per line) intended for agents.
+
+#### Usage
+
+```bash
+xin watch [--since <state>] [--max N] [--page TOKEN] [--checkpoint FILE] \
+  [--interval-ms MS] [--jitter-ms MS] [--hydrate] [--once] [--pretty]
+```
+
+Start cursor resolution order:
+1) `--page <TOKEN>`
+2) `--checkpoint <FILE>` (if file exists)
+3) `--since <state>`
+4) bootstrap: current Email collection state
+
+Notes:
+- `--page` is the source of truth for `since/max`. If you also pass `--since`/`--max` and they do not match the token, xin fails with `xinUsageError`.
+- `--checkpoint` is updated after every successful poll (best-effort atomic write), so you can resume by re-running with the same `--checkpoint`.
+
+#### Stream events (NDJSON)
+
+- `{"type":"ready", ...}`: emitted once at startup.
+- `{"type":"tick", ...}`: emitted when there are changes.
+- `{"type":"email.change", ...}`: one event per changed email id.
+- `{"type":"email.hydrated", ...}`: only when `--hydrate` is set.
+- Ctrl-C: emits `{"type":"stopped","reason":"ctrl_c"}` and exits.
+
+For the detailed event schema, see `docs/SCHEMA.md` §8.3.
 
 ---
 

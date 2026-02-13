@@ -441,7 +441,7 @@ All `xin drafts ...` commands use the same envelope; their `data` shapes are:
 
 ---
 
-## 8) History outputs
+## 8) History / watch outputs
 
 ### 8.1 `xin history` (bootstrap)
 
@@ -488,6 +488,61 @@ Paging:
 Notes:
 - Default: `history` returns **IDs only** (it does not explain what fields changed). Use `xin get` to hydrate.
 - With `--hydrate`, `history` additionally includes a `hydrated` object containing per-email summary items for `created` and `updated` ids.
+
+### 8.3 `xin watch ...` (stream)
+
+`watch` outputs a **stream** of JSON events. By default this is NDJSON (one JSON object per line).
+
+Event types:
+
+- `ready`:
+
+```json
+{ "type": "ready", "sinceState": "S...", "maxChanges": 100 }
+```
+
+- `tick` (emitted only when at least one change exists):
+
+```json
+{
+  "type": "tick",
+  "sinceState": "S0",
+  "newState": "S1",
+  "hasMoreChanges": false,
+  "counts": { "created": 1, "updated": 0, "destroyed": 0 }
+}
+```
+
+- `email.change`:
+
+```json
+{ "type": "email.change", "changeType": "created", "id": "M...", "newState": "S1" }
+```
+
+`changeType` is one of: `created|updated|destroyed`.
+
+- `email.hydrated` (only when `--hydrate` is set, and only when there are created/updated ids):
+
+```json
+{
+  "type": "email.hydrated",
+  "newState": "S1",
+  "hydrated": {
+    "created": [ {"emailId":"M...","threadId":"T..."} ],
+    "updated": [ {"emailId":"M...","threadId":"T..."} ]
+  }
+}
+```
+
+- `stopped` (Ctrl-C):
+
+```json
+{ "type": "stopped", "reason": "ctrl_c" }
+```
+
+Notes:
+- `--pretty` prints pretty JSON (multi-line) for humans; it is not NDJSON.
+- After the stream ends, xin prints the standard envelope as the final line (so consumers should treat `watch` output as a JSON-lines stream).
 
 ---
 

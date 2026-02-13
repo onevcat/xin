@@ -115,7 +115,7 @@ pub enum Command {
     /// History / changes.
     History(HistoryArgs),
 
-    /// Watch (push/polling) (TBD).
+    /// Watch for email changes (polling Email/changes; NDJSON stream).
     Watch(WatchArgs),
 }
 
