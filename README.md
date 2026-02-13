@@ -41,10 +41,65 @@ xin watch --checkpoint /tmp/xin.watch.token
 xin --plain watch --checkpoint /tmp/xin.watch.token
 ```
 
+## Most common agent flows (copy/paste)
+
+> If you’re running from source, prefix each command with:
+>
+> ```bash
+> cargo run --bin xin --
+> ```
+
+### 1) 查一下我现在的收件箱有哪些邮件（list inbox）
+
+```bash
+# Human-friendly
+xin --plain messages search "in:inbox" --max 50
+
+# JSON (stable contract)
+xin messages search "in:inbox" --max 50
+```
+
+### 2) 不需要的邮件就都归档（archive）
+
+```bash
+# Archive ONE message
+xin inbox do <emailId> archive
+
+# Archive the whole thread containing this message
+xin inbox do <emailId> archive --whole-thread
+
+# Archive MANY (example: all inbox items currently returned by search)
+xin messages search "in:inbox" --max 200 --json \
+  | jq -r '.data.items[].emailId' \
+  | xargs -n 50 sh -c 'xin batch modify "$@" --remove inbox --add archive' _
+```
+
+### 3) 看一下某封邮件具体的内容（read one email）
+
+```bash
+# Full content
+xin --plain get <emailId> --format full
+
+# Metadata-only (faster)
+xin --plain get <emailId> --format metadata
+```
+
+### 4) 帮我回复一下，说 XXXX（reply / send）
+
+```bash
+# Minimal reply (v0): send a new message to the original sender.
+# (Threading headers like In-Reply-To are not wired in the CLI yet.)
+xin send --to <sender@example.com> --subject "Re: <subject>" --text "XXXX"
+
+# Fastmail-only: generate a web URL for the original message (useful if you want to reply in UI)
+xin url <emailId>
+```
+
 ## Recommended workflow
 
 - **Triage inbox**:
-  - `xin inbox next` → pick the next email
+  - `xin messages search "in:inbox" --max 50` → list inbox
+  - `xin inbox next` → pick the next email to process (default: 1)
   - `xin inbox do <emailId> <archive|trash|read|unread> [--whole-thread]`
 - **Batch organize**:
   - `xin batch modify <emailId>... --add $seen --remove inbox`
