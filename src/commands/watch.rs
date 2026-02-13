@@ -87,7 +87,7 @@ pub async fn watch(account: Option<String>, args: &WatchArgs) -> Envelope<Value>
         }
     };
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => {
             emit_error(&e);

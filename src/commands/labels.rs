@@ -116,7 +116,7 @@ pub async fn list(
     account: Option<String>,
     _args: &LabelsListArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -141,7 +141,7 @@ pub async fn get(
     account: Option<String>,
     args: &LabelsGetArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -245,7 +245,7 @@ pub async fn create(
     account: Option<String>,
     args: &LabelsCreateArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -277,7 +277,7 @@ pub async fn rename(
     account: Option<String>,
     args: &LabelsRenameArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -302,7 +302,7 @@ pub async fn modify(
     account: Option<String>,
     args: &LabelsModifyArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -360,7 +360,7 @@ pub async fn delete(
     account: Option<String>,
     args: &LabelsDeleteArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };

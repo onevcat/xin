@@ -547,7 +547,78 @@ Notes:
 
 ---
 
-## 9) Notes / TBD
+## 9) Config / Auth outputs
+
+### 9.1 `xin config init`
+
+```json
+{
+  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "created": true,
+  "defaults": { "account": "fastmail" },
+  "accounts": ["fastmail"]
+}
+```
+
+### 9.2 `xin config list`
+
+```json
+{
+  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "defaultAccount": "fastmail",
+  "accounts": [
+    {
+      "name": "fastmail",
+      "baseUrl": "https://api.fastmail.com",
+      "sessionUrl": null,
+      "auth": { "type": "bearer", "tokenEnv": null, "tokenFile": "~/Library/Application Support/xin/tokens/fastmail.token" },
+      "trustRedirectHosts": ["api.fastmail.com", "jmap.fastmail.com", "fastmail.com"]
+    }
+  ]
+}
+```
+
+### 9.3 `xin config set-default`
+
+```json
+{
+  "path": "/Users/you/Library/Application Support/xin/config.json",
+  "defaultAccount": "fastmail"
+}
+```
+
+### 9.4 `xin config show`
+
+Without `--effective`: same as config list.
+
+With `--effective`:
+
+```json
+{
+  "selectedAccount": "fastmail",
+  "runtime": {
+    "baseUrl": "https://api.fastmail.com",
+    "auth": { "type": "bearer" },
+    "trustRedirectHosts": ["api.fastmail.com", "jmap.fastmail.com", "fastmail.com"]
+  }
+}
+```
+
+Note: secrets are never included in output.
+
+### 9.5 `xin auth set-token`
+
+```json
+{
+  "account": "fastmail",
+  "configPath": "/Users/you/Library/Application Support/xin/config.json",
+  "tokenFile": "/Users/you/Library/Application Support/xin/tokens/fastmail.token"
+}
+```
+
+---
+
+## 10) Notes / TBD
 
 - Exact `Email/get` properties requested from servers will vary; xin should keep the output normalized and stable.
 - Some servers may omit counts or certain fields; in that case, xin should set them to null rather than changing shape.

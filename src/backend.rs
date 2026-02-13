@@ -42,9 +42,9 @@ pub struct ModifyPlan {
 }
 
 impl Backend {
-    pub async fn connect() -> Result<Self, XinErrorOut> {
-        let cfg = crate::config::RuntimeConfig::from_env()?;
-        let j = XinJmap::connect(&cfg).await?;
+    pub async fn connect(account: Option<&str>) -> Result<Self, XinErrorOut> {
+        let resolved = crate::config::resolve_runtime_config(account)?;
+        let j = XinJmap::connect(&resolved.config).await?;
         Ok(Self { j })
     }
 

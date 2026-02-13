@@ -213,7 +213,7 @@ async fn upload_attachments(
 }
 
 pub async fn identities_list(account: Option<String>) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err("identities.list", account, e),
     };
@@ -243,7 +243,7 @@ pub async fn identities_list(account: Option<String>) -> Envelope<Value> {
 }
 
 pub async fn identities_get(account: Option<String>, args: &IdentitiesGetArgs) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err("identities.get", account, e),
     };
@@ -279,7 +279,7 @@ pub async fn identities_get(account: Option<String>, args: &IdentitiesGetArgs) -
 }
 
 pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err("send", account, e),
     };
@@ -399,7 +399,7 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
 
 pub async fn drafts_list(account: Option<String>, args: &DraftsListArgs) -> Envelope<Value> {
     // Reuse READ search machinery for query+hydrate+page tokens.
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err("drafts.list", account, e),
     };
@@ -432,7 +432,7 @@ pub async fn drafts_list(account: Option<String>, args: &DraftsListArgs) -> Enve
 pub async fn drafts_get(account: Option<String>, args: &DraftsGetArgs) -> Envelope<Value> {
     let command_name = "drafts.get";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -518,7 +518,7 @@ pub async fn drafts_get(account: Option<String>, args: &DraftsGetArgs) -> Envelo
 pub async fn drafts_create(account: Option<String>, args: &DraftsCreateArgs) -> Envelope<Value> {
     let command_name = "drafts.create";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -642,7 +642,7 @@ pub async fn drafts_create(account: Option<String>, args: &DraftsCreateArgs) -> 
 pub async fn drafts_update(account: Option<String>, args: &DraftsUpdateArgs) -> Envelope<Value> {
     let command_name = "drafts.update";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -759,7 +759,7 @@ pub async fn drafts_rewrite(
 ) -> Envelope<Value> {
     let command_name = "drafts.rewrite";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -1034,7 +1034,7 @@ pub async fn drafts_rewrite(
 pub async fn drafts_send(account: Option<String>, args: &DraftsSendArgs) -> Envelope<Value> {
     let command_name = "drafts.send";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -1085,7 +1085,7 @@ pub async fn drafts_send(account: Option<String>, args: &DraftsSendArgs) -> Enve
 pub async fn drafts_delete(account: Option<String>, args: &DraftsDeleteArgs) -> Envelope<Value> {
     let command_name = "drafts.delete";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -1150,7 +1150,7 @@ pub async fn drafts_destroy(
         );
     }
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };

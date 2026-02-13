@@ -642,3 +642,77 @@ For the detailed event schema, see `docs/SCHEMA.md` §8.3.
 - More consistent batch operations via JMAP methodCalls/backreferences.
 - Portable incremental sync via `*/changes` (and optional WebSocket push).
 - Convenience commands (`archive/read/unread/trash`) without forcing callers to remember label/keyword mechanics.
+
+---
+
+## 8) Config / Auth (v0)
+
+xin supports multiple accounts via a config file. Precedence: **CLI flag > env > config**.
+
+### Config file location
+
+- macOS: `~/Library/Application Support/xin/config.json`
+- Linux (XDG): `~/.config/xin/config.json`
+- Override: `XIN_CONFIG_PATH` environment variable
+
+### Config file format
+
+```jsonc
+{
+  "defaults": { "account": "fastmail" },
+  "accounts": {
+    "fastmail": {
+      "baseUrl": "https://api.fastmail.com",
+      "trustRedirectHosts": ["api.fastmail.com", "jmap.fastmail.com", "fastmail.com"],
+      "auth": { "type": "bearer", "tokenFile": "~/Library/Application Support/xin/tokens/fastmail.token" }
+    },
+    "other": {
+      "sessionUrl": "https://other.provider.com/.well-known/jmap",
+      "auth": { "type": "basic", "user": "me@provider.com", "passEnv": "OTHER_PASS" }
+    }
+  }
+}
+```
+
+Auth types:
+- `bearer`: Bearer token (preferred for Fastmail). Fields: `token` (inline, not recommended), `tokenEnv`, `tokenFile`.
+- `basic`: Basic auth. Fields: `user`, `pass` (inline), `passEnv`, `passFile`.
+
+Secrets are never printed in output; use env vars or token files for security.
+
+### Commands
+
+#### `xin config init`
+
+Initializes a minimal fastmail config if missing. Useful for first-time setup.
+
+#### `xin config list`
+
+Lists all configured accounts and the default.
+
+#### `xin config set-default <account>`
+
+Sets the default account (used when no `--account` flag is provided).
+
+#### `xin config show [--effective]`
+
+Shows config. Without `--effective`, shows raw config (secrets redacted). With `--effective`, shows the merged effective config (CLI/env/config resolved).
+
+#### `xin auth set-token <TOKEN> [--account <name>]`
+
+Stores a bearer token for an account:
+- Writes the token to the token file (default: `tokens/<account>.token` in the config dir).
+- Updates config to point to this token file.
+- If no account is specified, uses the default account.
+
+### Environment variable fallback (no config)
+
+xin also works without a config file by reading connection info from environment variables:
+
+- `XIN_BASE_URL` (or `XIN_SESSION_URL`)
+- `XIN_TOKEN` / `XIN_TOKEN_FILE` (bearer)
+- `XIN_BASIC_USER` / `XIN_BASIC_PASS` / `XIN_BASIC_PASS_FILE` (basic)
+- `XIN_TRUST_REDIRECT_HOSTS` (comma-separated allowlist)
+
+CLI flags (`--account`) are only available when using config.
+

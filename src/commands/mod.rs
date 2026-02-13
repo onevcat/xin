@@ -2,6 +2,8 @@ use crate::cli::*;
 use crate::error::XinErrorOut;
 use crate::output::Envelope;
 
+mod auth_cmd;
+mod config_cmd;
 mod history;
 mod inbox;
 mod labels;
@@ -20,13 +22,13 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         } => read::messages_search(account.clone(), args).await,
 
         // Phase 2: only READ first.
-        Command::Get(args) => read::get(args).await,
+        Command::Get(args) => read::get(account.clone(), args).await,
         Command::Thread {
             command: ThreadCommand::Get(args),
-        } => read::thread_get(args).await,
+        } => read::thread_get(account.clone(), args).await,
         Command::Thread {
             command: ThreadCommand::Attachments(args),
-        } => read::thread_attachments(args).await,
+        } => read::thread_attachments(account.clone(), args).await,
         Command::Thread {
             command: ThreadCommand::Modify(args),
         } => organize::thread_modify(account.clone(), args, cli.dry_run).await,
@@ -45,7 +47,7 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Thread {
             command: ThreadCommand::Delete(args),
         } => organize::thread_delete(account.clone(), args, cli.dry_run, cli.force).await,
-        Command::Attachment(args) => read::attachment_download(args).await,
+        Command::Attachment(args) => read::attachment_download(account.clone(), args).await,
         Command::Archive(args) => organize::archive(account.clone(), args, cli.dry_run).await,
         Command::Read(args) => organize::read(account.clone(), args, cli.dry_run).await,
         Command::Unread(args) => organize::unread(account.clone(), args, cli.dry_run).await,
@@ -124,6 +126,17 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::History(args) => history::history(account.clone(), args).await,
         Command::Watch(args) => watch::watch(account.clone(), args).await,
 
+        Command::Config { command: sub } => match sub {
+            ConfigCommand::Init => config_cmd::init().await,
+            ConfigCommand::List => config_cmd::list().await,
+            ConfigCommand::SetDefault(args) => config_cmd::set_default(args).await,
+            ConfigCommand::Show(args) => config_cmd::show(account.as_deref(), args).await,
+        },
+
+        Command::Auth { command: sub } => match sub {
+            AuthCommand::SetToken(args) => auth_cmd::set_token(account.as_deref(), args).await,
+        },
+
         _ => {
             let (command, _details) = command_name(&cli.command);
             Envelope::err(
@@ -199,5 +212,8 @@ fn command_name(cmd: &Command) -> (String, Option<String>) {
         },
         Command::History(_) => ("history".to_string(), None),
         Command::Watch(_) => ("watch".to_string(), None),
+        Command::Config { .. } => ("config".to_string(), None),
+        Command::Auth { .. } => ("auth".to_string(), None),
     }
 }
+

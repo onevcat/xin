@@ -32,7 +32,7 @@ pub(crate) fn decode_page_token(s: &str) -> Result<PageToken, XinErrorOut> {
 pub async fn history(account: Option<String>, args: &HistoryArgs) -> Envelope<Value> {
     let command_name = "history";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };

@@ -43,7 +43,7 @@ pub async fn search(
     account: Option<String>,
     args: &SearchArgs,
 ) -> Envelope<Value> {
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -147,11 +147,10 @@ pub async fn messages_search(
 
 // READ: get
 
-pub async fn get(args: &GetArgs) -> Envelope<Value> {
+pub async fn get(account: Option<String>, args: &GetArgs) -> Envelope<Value> {
     let command_name = "get";
-    let account = None;
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -294,11 +293,10 @@ pub async fn get(args: &GetArgs) -> Envelope<Value> {
     }
 }
 
-pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
+pub async fn thread_get(account: Option<String>, args: &ThreadGetArgs) -> Envelope<Value> {
     let command_name = "thread.get";
-    let account = None;
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -347,11 +345,13 @@ pub async fn thread_get(args: &ThreadGetArgs) -> Envelope<Value> {
     }
 }
 
-pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value> {
+pub async fn thread_attachments(
+    account: Option<String>,
+    args: &ThreadAttachmentsArgs,
+) -> Envelope<Value> {
     let command_name = "thread.attachments";
-    let account = None;
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -384,11 +384,10 @@ pub async fn thread_attachments(args: &ThreadAttachmentsArgs) -> Envelope<Value>
     )
 }
 
-pub async fn attachment_download(args: &AttachmentArgs) -> Envelope<Value> {
+pub async fn attachment_download(account: Option<String>, args: &AttachmentArgs) -> Envelope<Value> {
     let command_name = "attachment";
-    let account = None;
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };

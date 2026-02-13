@@ -167,7 +167,7 @@ pub async fn batch_modify(
 ) -> Envelope<Value> {
     let command_name = "batch.modify";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -250,7 +250,7 @@ pub async fn batch_delete(
         );
     }
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -282,7 +282,7 @@ pub async fn thread_modify(
 ) -> Envelope<Value> {
     let command_name = "thread.modify";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -389,7 +389,7 @@ pub async fn thread_archive(
 ) -> Envelope<Value> {
     let command_name = "thread.archive";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -441,7 +441,7 @@ pub async fn thread_read(
 ) -> Envelope<Value> {
     let command_name = "thread.read";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -470,7 +470,7 @@ pub async fn thread_unread(
 ) -> Envelope<Value> {
     let command_name = "thread.unread";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -499,7 +499,7 @@ pub async fn thread_trash(
 ) -> Envelope<Value> {
     let command_name = "thread.trash";
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -551,7 +551,7 @@ pub async fn thread_delete(
         );
     }
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -624,7 +624,7 @@ pub async fn archive(
         );
     }
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -729,7 +729,7 @@ pub async fn read(account: Option<String>, args: &ReadArgs, dry_run: bool) -> En
     let mut summary = ChangeSummary::default();
     summary.added_keywords.push("$seen".to_string());
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -807,7 +807,7 @@ pub async fn unread(account: Option<String>, args: &UnreadArgs, dry_run: bool) -
     let mut summary = ChangeSummary::default();
     summary.removed_keywords.push("$seen".to_string());
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };
@@ -879,7 +879,7 @@ pub async fn trash(account: Option<String>, args: &TrashArgs, dry_run: bool) -> 
         );
     }
 
-    let backend = match Backend::connect().await {
+    let backend = match Backend::connect(account.as_deref()).await {
         Ok(b) => b,
         Err(e) => return Envelope::err(command_name, account, e),
     };

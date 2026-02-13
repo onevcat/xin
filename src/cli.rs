@@ -117,6 +117,18 @@ pub enum Command {
 
     /// Watch for email changes (polling Email/changes; NDJSON stream).
     Watch(WatchArgs),
+
+    /// Config file operations.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+
+    /// Credential helpers.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
 }
 
 // --- Read
@@ -668,6 +680,47 @@ pub struct DraftsSendArgs {
 
     #[arg(long)]
     pub identity: Option<String>,
+}
+
+// --- Config / auth
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommand {
+    /// Initialize a minimal config file (fastmail default) if missing.
+    Init,
+
+    /// List configured accounts.
+    List,
+
+    /// Set the default account.
+    SetDefault(ConfigSetDefaultArgs),
+
+    /// Show config (secrets are never printed).
+    Show(ConfigShowArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigSetDefaultArgs {
+    pub account: String,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigShowArgs {
+    /// Show the merged effective config (CLI/env/config), without secrets.
+    #[arg(long)]
+    pub effective: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AuthCommand {
+    /// Store a bearer token for an account (writes tokenFile and updates config).
+    SetToken(AuthSetTokenArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct AuthSetTokenArgs {
+    /// The bearer token value.
+    pub token: String,
 }
 
 // --- History / watch

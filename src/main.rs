@@ -1,3 +1,4 @@
+mod app_config;
 mod backend;
 mod cli;
 mod commands;
