@@ -49,7 +49,8 @@ jobs:
 
       - name: Run smoke tests (all feature cases)
         working-directory: /home/runner/work/xin/xin
-        run: cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases --all
+        # Skip --fresh: CI starts fresh docker each time, no need to reset state
+        run: cargo run --bin xin-feature -- --case-dir tests/feature/stalwart/cases --all
 
       - name: Dump Stalwart logs (on failure)
         if: failure()
