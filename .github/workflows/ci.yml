@@ -47,6 +47,10 @@ jobs:
         # xin-feature manages Stalwart lifecycle itself (up/down + optional fresh resets) based on cases.
         run: cargo run --bin xin-feature -- --fresh --case-dir tests/feature/stalwart/cases --all
 
+      - name: Watch e2e (Stalwart)
+        working-directory: tests/feature/stalwart
+        run: ./scripts/watch_check.sh
+
       - name: Dump Stalwart logs (on failure)
         if: failure()
         run: docker logs xin-stalwart || true
