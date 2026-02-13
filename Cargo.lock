@@ -787,8 +787,7 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 [[package]]
 name = "jmap-client"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0a269c4668bc7c12c61bf142f4f30c8d568d5afa8472f9dd881d83d2551323a"
+source = "git+https://github.com/onevcat/jmap-client?rev=019ef8e#019ef8e2ecd17dafce96ba06bcaed093d9016c3a"
 dependencies = [
  "ahash",
  "async-stream",

@@ -22,3 +22,7 @@ assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
 wiremock = "0.6"
+
+[patch.crates-io]
+# Use our fork while upstream PR is pending.
+jmap-client = { git = "https://github.com/onevcat/jmap-client", rev = "019ef8e" }
