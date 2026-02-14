@@ -84,6 +84,134 @@ fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> O
     None
 }
 
+/// Handle reply-related arguments:
+/// - Resolve the original email via RFC822 Message-ID (Email/query + header filter)
+/// - Build In-Reply-To / References headers
+/// - Infer recipients (reply / reply-all)
+///
+/// Returns: (reply_headers, to, cc)
+async fn handle_reply_args(
+    backend: &Backend,
+    args: &SendArgs,
+    self_email: &str,
+) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>), XinErrorOut> {
+    use std::collections::HashSet;
+
+    let reply_to_msg_id = args.reply_to_message_id.as_ref().ok_or_else(|| {
+        XinErrorOut::usage("--reply-to-message-id is required for reply functionality".to_string())
+    })?;
+
+    // Fetch original email by Message-ID (JMAP Email/get works on emailId, not Message-ID).
+    let original_email = backend
+        .get_email_by_message_id(
+            reply_to_msg_id,
+            Some(vec![
+                jmap_client::email::Property::Id,
+                jmap_client::email::Property::ThreadId,
+                jmap_client::email::Property::MessageId,
+                jmap_client::email::Property::References,
+                jmap_client::email::Property::From,
+                jmap_client::email::Property::To,
+                jmap_client::email::Property::Cc,
+            ]),
+        )
+        .await?
+        .ok_or_else(|| XinErrorOut::usage(format!("original email not found by Message-ID: {reply_to_msg_id}")))?;
+
+    // ---- headers
+
+    let orig_msg_id = original_email
+        .message_id()
+        .and_then(|ids| ids.first())
+        .cloned()
+        .ok_or_else(|| XinErrorOut::usage("original email missing Message-ID".to_string()))?;
+
+    let mut reply_headers: Vec<(String, String)> = Vec::new();
+    reply_headers.push(("In-Reply-To".to_string(), orig_msg_id.clone()));
+
+    // References: existing references + Message-ID (maintain thread)
+    let mut refs: Vec<String> = Vec::new();
+    if let Some(existing_refs) = original_email.references() {
+        refs.extend(existing_refs.iter().cloned());
+    }
+    refs.push(orig_msg_id);
+    reply_headers.push(("References".to_string(), refs.join(" ")));
+
+    // ---- recipients
+
+    fn extract_email(s: &str) -> String {
+        // Accept either "Name <a@b.com>" or "a@b.com".
+        if let (Some(l), Some(r)) = (s.rfind('<'), s.rfind('>')) {
+            if l < r {
+                return s[l + 1..r].trim().to_string();
+            }
+        }
+        s.trim().to_string()
+    }
+
+    fn canonical_key(s: &str) -> String {
+        extract_email(s).to_lowercase()
+    }
+
+    let self_key = self_email.to_lowercase();
+
+    let mut to: Vec<String> = args.to.clone();
+    let mut cc: Vec<String> = args.cc.clone();
+
+    let mut seen: HashSet<String> = HashSet::new();
+    for r in to.iter().chain(cc.iter()) {
+        seen.insert(canonical_key(r));
+    }
+
+    let mut add_to = |list: &mut Vec<String>, raw: String| {
+        let key = canonical_key(&raw);
+        if key == self_key {
+            return;
+        }
+        if !seen.contains(&key) {
+            seen.insert(key);
+            list.push(raw);
+        }
+    };
+
+    // Helper: format EmailAddress as "Name <email>" or "email".
+    let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String {
+        let email = a.email();
+        if let Some(name) = a.name() {
+            format!("{} <{}>", name, email)
+        } else {
+            email.to_string()
+        }
+    };
+
+    // Add original From as primary recipient for reply modes:
+    // - reply: only when user didn't provide explicit --to
+    // - reply-all: always include original sender
+    if args.reply_all || args.to.is_empty() {
+        if let Some(from_addrs) = original_email.from() {
+            for addr in from_addrs {
+                add_to(&mut to, fmt_addr(addr));
+            }
+        }
+    }
+
+    if args.reply_all {
+        // For reply-all, include original To + Cc in CC.
+        if let Some(to_addrs) = original_email.to() {
+            for addr in to_addrs {
+                add_to(&mut cc, fmt_addr(addr));
+            }
+        }
+        if let Some(cc_addrs) = original_email.cc() {
+            for addr in cc_addrs {
+                add_to(&mut cc, fmt_addr(addr));
+            }
+        }
+    }
+
+    Ok((reply_headers, to, cc))
+}
+
 fn find_drafts_mailbox_id(
     mailboxes: &[jmap_client::mailbox::Mailbox],
 ) -> Result<String, XinErrorOut> {
@@ -284,6 +412,65 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err("send", account, e),
     };
 
+    if args.reply_all && args.reply_to_message_id.is_none() {
+        return Envelope::err(
+            "send",
+            account,
+            XinErrorOut::usage("--reply-all requires --reply-to-message-id".to_string()),
+        );
+    }
+
+    // Resolve Drafts mailbox first (keeps the request ordering stable and avoids
+    // introducing new "early return" behavior changes).
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    // Resolve identity early so reply-all can exclude self.
+    let identities = match backend.list_identities().await {
+        Ok(i) => i,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    let (identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err("send", account, e),
+        };
+
+    // Handle reply parameters: fetch original email and build headers/recipients.
+    let mut extra_headers: Vec<(String, String)> = Vec::new();
+    let (to, cc) = if args.reply_to_message_id.is_some() {
+        match handle_reply_args(&backend, args, &from_email).await {
+            Ok((h, to, cc)) => {
+                extra_headers.extend(h);
+                (to, cc)
+            }
+            Err(e) => return Envelope::err("send", account, e),
+        }
+    } else {
+        (args.to.clone(), args.cc.clone())
+    };
+
+    // Custom Reply-To header (allowed for both normal send and reply).
+    if let Some(reply_to) = &args.reply_to {
+        extra_headers.push(("Reply-To".to_string(), reply_to.clone()));
+    }
+
+    if to.is_empty() {
+        return Envelope::err(
+            "send",
+            account,
+            XinErrorOut::usage("missing recipients: provide --to (or use --reply-to-message-id)".to_string()),
+        );
+    }
+
     let text = match &args.text {
         Some(v) => Some(match read_text_arg(v) {
             Ok(t) => t,
@@ -310,26 +497,6 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         );
     }
 
-    let mailboxes = match backend.list_mailboxes().await {
-        Ok(m) => m,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
-        Ok(id) => id,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let identities = match backend.list_identities().await {
-        Ok(i) => i,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let (identity_id, from_name, from_email) =
-        match resolve_identity(&identities, args.identity.as_deref()) {
-            Ok(v) => v,
-            Err(e) => return Envelope::err("send", account, e),
-        };
 
     let uploaded = match upload_attachments(&backend, &args.attach).await {
         Ok(v) => v,
@@ -337,17 +504,22 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
     };
 
     let email = match backend
-        .create_draft_email(
+        .create_draft_email_with_headers(
             &drafts_id,
             from_name,
             from_email,
-            &args.to,
-            &args.cc,
+            &to,
+            &cc,
             &args.bcc,
             Some(&args.subject),
             text.as_deref(),
             html.as_deref(),
             &uploaded,
+            if extra_headers.is_empty() {
+                None
+            } else {
+                Some(&extra_headers)
+            },
         )
         .await
     {

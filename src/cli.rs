@@ -506,10 +506,10 @@ pub struct IdentitiesGetArgs {
 }
 
 #[derive(Args, Debug)]
-#[command(after_help = "Examples:\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\"\n  xin send --to bob@example.com --subject \"Hello\" --text @body.txt --attach ./a.pdf\n  xin send --to bob@example.com --subject \"Hello\" --body-html @body.html\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\" --identity alice@example.com")]
+#[command(after_help = "Examples:\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\"\n  xin send --to bob@example.com --subject \"Hello\" --text @body.txt --attach ./a.pdf\n  xin send --to bob@example.com --subject \"Hello\" --body-html @body.html\n  xin send --to bob@example.com --subject \"Hello\" --text \"hi\" --identity alice@example.com\n\nReply examples:\n  xin send --reply-to-message-id \"<msg@example.com>\" --subject \"Re: Hi\" --text \"Reply text\"\n  xin send --reply-to-message-id \"<msg@example.com>\" --reply-all --subject \"Re: Hi\" --text \"Reply all\"\n  xin send --reply-to-message-id \"<msg@example.com>\" --reply-to \"other@example.com\" --subject \"Re: Hi\" --text \"Custom reply-to\"")]
 pub struct SendArgs {
     /// Recipient(s). Can be specified multiple times.
-    #[arg(long, required = true, num_args = 1..)]
+    #[arg(long, num_args = 1..)]
     pub to: Vec<String>,
 
     #[arg(long)]
@@ -536,6 +536,22 @@ pub struct SendArgs {
     /// Identity to send as (id or email).
     #[arg(long)]
     pub identity: Option<String>,
+
+    /// Reply to a specific email. Sets In-Reply-To and References headers
+    /// based on the original email's Message-ID.
+    #[arg(long = "reply-to-message-id")]
+    pub reply_to_message_id: Option<String>,
+
+    /// Reply-all: auto-populate recipients from the original message.
+    /// - Original From -> new To
+    /// - Original To + Cc -> new Cc
+    /// Requires --reply-to-message-id.
+    #[arg(long)]
+    pub reply_all: bool,
+
+    /// Custom Reply-To header address.
+    #[arg(long = "reply-to")]
+    pub reply_to: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
