@@ -114,7 +114,7 @@ xin auth        # Credential helpers
 
 ## Reference Documentation
 
-- High-level overview: [commands.md](./commands.md)
+- High-level overview: [commands.md](references/commands.md)
 
 - [search](references/search.md) - Search (thread-like by default)
 - [messages](references/messages.md) - Per-email search commands

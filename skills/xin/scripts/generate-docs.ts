@@ -14,15 +14,16 @@ const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const SKILL_DIR = path.join(SCRIPT_DIR, "..")
 const REFERENCES_DIR = path.join(SKILL_DIR, "references")
 const SKILL_MD = path.join(SKILL_DIR, "SKILL.md")
-const SKILL_TEMPLATE = path.join(SKILL_DIR, "SKILL.template.md")
+// SKILL template is kept in scripts/templates (not part of the skill itself)
+const SKILL_TEMPLATE = path.join(SCRIPT_DIR, "templates", "SKILL.template.md")
 
 // Files to preserve (not generated from CLI help)
 // Keep these stable, hand-edited references around when regenerating.
 const PRESERVED_FILES: string[] = [
   "common-tasks.md",
   "SCHEMA.md",
-  "SCHEMA.from-source.md",
-  "SCHEMA.compare.md",
+  // commands.md is manually curated (merged with high-level overview)
+  "commands.md",
 ]
 
 // Commands to skip (not useful for docs, or pseudo-commands like clap's `help`)
