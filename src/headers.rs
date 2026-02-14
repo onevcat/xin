@@ -216,7 +216,11 @@ pub fn extract_headers_dict_dual(
                 .and_then(|ids| ids.first().cloned())
                 .map(Value::String)
                 .unwrap_or(Value::Null),
-            "in-reply-to" => json_opt(primary.in_reply_to()),
+            "in-reply-to" => primary
+                .in_reply_to()
+                .and_then(|ids| ids.first().cloned())
+                .map(Value::String)
+                .unwrap_or(Value::Null),
             "references" => json_opt(primary.references()),
 
             // Custom headers: computed header:* properties.

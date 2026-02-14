@@ -165,28 +165,19 @@ async fn handle_reply_args(
 
     let mut add_to = |list: &mut Vec<String>, raw: String| {
         let key = canonical_key(&raw);
-        if key == self_key {
-            return;
-        }
         if !seen.contains(&key) {
             seen.insert(key);
             list.push(raw);
         }
     };
 
-    // Helper: format EmailAddress as "Name <email>" or "email".
-    let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String {
-        let email = a.email();
-        if let Some(name) = a.name() {
-            format!("{} <{}>", name, email)
-        } else {
-            email.to_string()
-        }
-    };
+    // Helper: use bare email for auto-populated recipients (most interoperable).
+    let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String { a.email().to_string() };
 
     // Add original From as primary recipient for reply modes:
     // - reply: only when user didn't provide explicit --to
     // - reply-all: always include original sender
+    // NOTE: We don't exclude self here - replying to yourself is valid.
     if args.reply_all || args.to.is_empty() {
         if let Some(from_addrs) = original_email.from() {
             for addr in from_addrs {
@@ -196,15 +187,26 @@ async fn handle_reply_args(
     }
 
     if args.reply_all {
-        // For reply-all, include original To + Cc in CC.
+        // For reply-all, include original To + Cc in CC, excluding self.
+        let mut add_cc_excluding_self = |raw: String| {
+            let key = canonical_key(&raw);
+            if key == self_key {
+                return;
+            }
+            if !seen.contains(&key) {
+                seen.insert(key);
+                cc.push(raw);
+            }
+        };
+
         if let Some(to_addrs) = original_email.to() {
             for addr in to_addrs {
-                add_to(&mut cc, fmt_addr(addr));
+                add_cc_excluding_self(fmt_addr(addr));
             }
         }
         if let Some(cc_addrs) = original_email.cc() {
             for addr in cc_addrs {
-                add_to(&mut cc, fmt_addr(addr));
+                add_cc_excluding_self(fmt_addr(addr));
             }
         }
     }
