@@ -1,0 +1,118 @@
+id: send_reply_smoke
+it: "send reply smoke: reply-to-message-id sets In-Reply-To and References headers"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+
+steps:
+  # Test reply functionality with alice as both sender and replier (simpler case)
+  - name: alice-send-to-self
+    say:
+      - "Given alice is authenticated"
+      - "When alice sends a message to herself"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] reply-smoke orig"
+        - --text
+        - "hello self"
+    save:
+      origEmailId: /data/draft/emailId
+
+  - name: alice-wait-visible
+    say:
+      - "Then alice should see the message in her inbox"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - subject:reply-smoke orig
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/subject
+        contains: "reply-smoke orig"
+    save:
+      aliceEmailId: /data/items/0/emailId
+
+  - name: alice-get-message-id
+    say:
+      - "And alice can read Message-ID"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - get
+        - ${aliceEmailId}
+        - --format
+        - metadata
+        - --headers
+        - message-id
+    expect:
+      - path: /data/email/headers/message-id
+        exists: true
+    save:
+      origMsgId: /data/email/headers/message-id
+
+  - name: alice-reply
+    say:
+      - "When alice replies using reply-to-message-id"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - send
+        - --reply-to-message-id
+        - ${origMsgId}
+        - --subject
+        - "[xin-case:${caseId}:${runId}] reply-smoke reply"
+        - --text
+        - "reply text"
+    expect:
+      - path: /ok
+        equals: true
+    save:
+      replyDraftId: /data/draft/emailId
+
+  - name: alice-get-reply-headers
+    say:
+      - "And the reply draft should contain In-Reply-To and References"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - get
+        - ${replyDraftId}
+        - --format
+        - metadata
+        - --headers
+        - in-reply-to,references
+    expect:
+      - path: /data/email/headers/in-reply-to
+        equals: ${origMsgId}
+      - path: /data/email/headers/references
+        exists: true
