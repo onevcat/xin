@@ -1,5 +1,5 @@
 id: send_reply_smoke
-it: "send reply smoke: reply-to-message-id sets In-Reply-To and References headers"
+it: "reply command smoke: reply <emailId> sets In-Reply-To and References headers"
 requiresFresh: false
 
 seed:
@@ -78,15 +78,14 @@ steps:
 
   - name: alice-reply
     say:
-      - "When alice replies using reply-to-message-id"
+      - "When alice replies using xin reply"
     env:
       XIN_BASIC_USER: alice
       XIN_BASIC_PASS: alice-pass
     xin:
       args:
-        - send
-        - --reply-to-message-id
-        - ${origMsgId}
+        - reply
+        - ${aliceEmailId}
         - --subject
         - "[xin-case:${caseId}:${runId}] reply-smoke reply"
         - --text
@@ -114,5 +113,5 @@ steps:
     expect:
       - path: /data/email/headers/in-reply-to
         equals: ${origMsgId}
-      - path: /data/email/headers/references
-        exists: true
+      - path: /data/email/headers/references/0
+        equals: ${origMsgId}

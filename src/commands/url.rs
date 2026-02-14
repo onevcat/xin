@@ -40,7 +40,8 @@ pub async fn url(account: Option<String>, args: &UrlArgs) -> Envelope<Value> {
             command_name,
             account,
             XinErrorOut::not_implemented(
-                "url is Fastmail-only and requires one or more ids (threadId or emailId)".to_string(),
+                "url is Fastmail-only and requires one or more ids (threadId or emailId)"
+                    .to_string(),
             ),
         );
     }
@@ -68,9 +69,7 @@ pub async fn url(account: Option<String>, args: &UrlArgs) -> Envelope<Value> {
     for id in &args.ids {
         // Try thread id first.
         let (kind, email_id) = match backend.thread_email_ids(id).await {
-            Ok(Some(email_ids)) if !email_ids.is_empty() => {
-                ("thread", email_ids[0].clone())
-            }
+            Ok(Some(email_ids)) if !email_ids.is_empty() => ("thread", email_ids[0].clone()),
             _ => ("email", id.clone()),
         };
 
@@ -127,5 +126,10 @@ pub async fn url(account: Option<String>, args: &UrlArgs) -> Envelope<Value> {
         }
     }
 
-    Envelope::ok(command_name, account, json!({"items": items}), Meta::default())
+    Envelope::ok(
+        command_name,
+        account,
+        json!({"items": items}),
+        Meta::default(),
+    )
 }

@@ -193,7 +193,14 @@ async fn plain_watch_outputs_ready_and_change_lines() {
     let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
-        .args(["--plain", "watch", "--since", "S0", "--once", "--no-envelope"])
+        .args([
+            "--plain",
+            "watch",
+            "--since",
+            "S0",
+            "--once",
+            "--no-envelope",
+        ])
         .output()
         .expect("run");
 

@@ -60,12 +60,21 @@ pub async fn list() -> Envelope<Value> {
     let mut accounts: Vec<Value> = Vec::new();
     for (name, acct) in &cfg.accounts {
         let auth = match &acct.auth {
-            app_config::AuthConfigFile::Bearer { token_env, token_file, .. } => json!({
+            app_config::AuthConfigFile::Bearer {
+                token_env,
+                token_file,
+                ..
+            } => json!({
                 "type": "bearer",
                 "tokenEnv": token_env,
                 "tokenFile": token_file,
             }),
-            app_config::AuthConfigFile::Basic { user, pass_env, pass_file, .. } => json!({
+            app_config::AuthConfigFile::Basic {
+                user,
+                pass_env,
+                pass_file,
+                ..
+            } => json!({
                 "type": "basic",
                 "user": user,
                 "passEnv": pass_env,

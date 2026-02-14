@@ -110,8 +110,9 @@ pub fn expand_user_path(s: &str) -> Result<PathBuf, XinErrorOut> {
 
 pub fn read_config() -> Result<(AppConfig, PathBuf), XinErrorOut> {
     let path = default_config_path()?;
-    let text = fs::read_to_string(&path)
-        .map_err(|e| XinErrorOut::config(format!("failed to read config {}: {e}", path.display())))?;
+    let text = fs::read_to_string(&path).map_err(|e| {
+        XinErrorOut::config(format!("failed to read config {}: {e}", path.display()))
+    })?;
     let cfg: AppConfig = serde_json::from_str(&text)
         .map_err(|e| XinErrorOut::config(format!("invalid config json: {e}")))?;
     Ok((cfg, path))
@@ -164,8 +165,7 @@ pub fn write_token_file(path: &Path, token: &str) -> Result<(), XinErrorOut> {
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, format!("{}\n", token.trim()))
         .map_err(|e| XinErrorOut::config(format!("token write failed: {e}")))?;
-    fs::rename(&tmp, path)
-        .map_err(|e| XinErrorOut::config(format!("token rename failed: {e}")))?;
+    fs::rename(&tmp, path).map_err(|e| XinErrorOut::config(format!("token rename failed: {e}")))?;
 
     #[cfg(unix)]
     {

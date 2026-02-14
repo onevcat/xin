@@ -245,31 +245,6 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
         .mount(&server)
         .await;
 
-    // Resolve original by Message-ID via Email/query
-    let query_response = json!({
-        "sessionState": "s",
-        "methodResponses": [
-            ["Email/query", {
-                "accountId": "A",
-                "queryState": "s",
-                "canCalculateChanges": false,
-                "position": 0,
-                "ids": ["orig1"],
-                "total": 1,
-                "limit": 2
-            }, "q0"]
-        ]
-    });
-
-    Mock::given(method("POST"))
-        .and(path("/jmap"))
-        .and(body_string_contains("Email/query"))
-        .and(body_string_contains("Message-ID"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(query_response))
-        .expect(1)
-        .mount(&server)
-        .await;
-
     // Fetch original via Email/get
     let get_response = json!({
         "sessionState": "s",
@@ -350,9 +325,8 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
         .env("XIN_BASE_URL", server.uri())
         .env("XIN_TOKEN", "test-token")
         .args([
-            "send",
-            "--reply-to-message-id",
-            "<orig@example.com>",
+            "reply",
+            "orig1",
             "--subject",
             "Re: Hi",
             "--text",

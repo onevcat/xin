@@ -2,69 +2,50 @@
 
 ## 目标
 
-为 `xin send` 添加 reply 功能，支持：
-- Reply to a specific email (via Message-ID)
+为 `xin reply` 添加 reply 功能，**以 JMAP Email id 为输入**，避免让用户处理 Message-ID：
+- Reply to a specific email (via JMAP `emailId`)
 - Reply all (auto-populate recipients)
-- Reply within a thread
+- Preserve threading headers (`In-Reply-To`, `References`)
 
 ## CLI 参数设计
 
-参考 gog gmail 和 INITIAL.md，设计如下：
+参考 gog gmail，但接口更 agent-first：
 
-### 新增参数
-
-```rust
-/// Reply to a specific email. Sets In-Reply-To and References headers
-/// based on the original email's Message-ID.
-#[arg(long = "reply-to-message-id")]
-pub reply_to_message_id: Option<String>,
-
-/// Reply within a thread. The thread is determined by the original email's
-/// thread or explicitly via thread ID. Sets References header.
-#[arg(long)]
-pub thread_id: Option<String>,
-
-/// Auto-populate recipients from original message (To -> To, CC -> CC).
-/// Requires --reply-to-message-id or fetching from a thread.
-#[arg(long)]
-pub reply_all: bool,
-
-/// Custom Reply-To header address.
-#[arg(long = "reply-to")]
-pub reply_to: Option<String>,
+```
+xin reply <emailId> [--reply-all] [--to ...] [--cc ...] [--bcc ...]
+          [--subject ...] [--text ... | --body-html ... | --attach ...]
+          [--identity <id|email>]
 ```
 
-### 参数互斥/依赖
+### 参数说明
 
-- `--reply-all` 必须配合 `--reply-to-message-id` 或 `--thread-id`（或从 thread 解析）
-- `--thread-id` 在 JMAP 中是服务器管理的，客户端不能直接设置。但可以通过 `References` header 来关联线程。
-- `--reply-to-message-id` 是最核心的参数，用于获取原始邮件的 Message-ID
+- `<emailId>`：来自 `xin search` / `xin messages search` / `xin inbox next`
+- `--reply-all`：在 CC 中补齐原邮件 To + Cc（排除 self）
+- `--to`：若提供则不再自动推导 To
+- `--subject`：不提供则自动补 `Re: <original subject>`
 
-### 实现原理 (JMAP)
+## 实现原理 (JMAP)
 
-1. **获取原始邮件**: 使用 `Email/get` 获取原始邮件的 metadata
-2. **提取 headers**:
-   - `messageId` -> 设置 `In-Reply-To` header
-   - `references` (如果有) + `messageId` -> 设置 `References` header
-3. **自动填充 recipients** (当使用 `--reply-all`):
-   - Original `to` -> New `cc`
-   - Original `cc` -> New `cc`
-   - Original `from` -> New `to`
+1) **获取原始邮件**: 使用 `Email/get` 读取 `messageId`, `references`, `from`, `to`, `cc`, `subject`
+2) **构造 threading headers**:
+   - `In-Reply-To: <original-message-id>`
+   - `References: <existing-refs> <original-message-id>`
+3) **推导收件人**:
+   - reply：默认 `From -> To`
+   - reply-all：`From -> To` + `To/Cc -> Cc`（排除 self）
+4) **创建 draft 并提交**：复用 `Email/set` + `EmailSubmission/set`
 
 ## 预期使用方式
 
 ```bash
 # Basic reply (to sender only)
-xin send --reply-to-message-id "<original-message-id@example.com>" \
-  --subject "Re: Original Subject" --text "My reply"
+xin reply <emailId> --text "My reply"
 
 # Reply all
-xin send --reply-to-message-id "<original-message-id@example.com>" \
-  --reply-all --subject "Re: Original Subject" --text "My reply"
+xin reply <emailId> --reply-all --text "My reply"
 
-# Reply with custom Reply-To
-xin send --reply-to-message-id "<original-message-id@example.com>" \
-  --reply-to "another@example.com" --subject "Re: Original Subject" --text "My reply"
+# Override recipients
+xin reply <emailId> --to other@example.com --text "Custom reply"
 ```
 
 ## 输出格式
@@ -73,11 +54,10 @@ xin send --reply-to-message-id "<original-message-id@example.com>" \
 
 ## 测试计划
 
-1. Unit tests: 参数解析、header 构建逻辑
-2. Smoke tests: 模拟回复流程（需要 mock JMAP server）
+1. Unit/Mock tests: reply recipient inference + headers
+2. Stalwart smoke: reply workflow works end-to-end
 
 ## 风险/注意事项
 
-- `--thread-id` 在 JMAP 中是隐式的，服务器自动管理。我们只能通过 `References` header 来"建议"线程关联。
-- 如果原始邮件没有 `Message-ID`，需要报错或警告。
-- 需要考虑安全问题：防止循环引用等。
+- Threading 依赖 `Message-ID`/`References`，必须从原邮件取值。
+- 服务器不应要求用户提供 Message-ID；这是内部实现细节。

@@ -48,11 +48,7 @@ fn plain_err(env: &Envelope<Value>) -> String {
         .as_ref()
         .map(|e| e.kind.as_str())
         .unwrap_or("error");
-    let msg = env
-        .error
-        .as_ref()
-        .map(|e| e.message.as_str())
-        .unwrap_or("");
+    let msg = env.error.as_ref().map(|e| e.message.as_str()).unwrap_or("");
 
     tsv(&[
         "ERR".to_string(),
@@ -70,10 +66,7 @@ fn render_search_items(items: &[Value]) -> String {
     let mut lines: Vec<String> = Vec::new();
 
     for it in items {
-        let received_at = it
-            .get("receivedAt")
-            .and_then(|x| x.as_str())
-            .unwrap_or("");
+        let received_at = it.get("receivedAt").and_then(|x| x.as_str()).unwrap_or("");
         let from = first_email(it, "/from").unwrap_or_default();
         let subject = it.get("subject").and_then(|x| x.as_str()).unwrap_or("");
         let unread = it.get("unread").and_then(|x| x.as_bool()).unwrap_or(false);
@@ -265,8 +258,14 @@ fn render_get(env: &Envelope<Value>) -> String {
     out.push_str(&format!("Date:    {}\n", received_at));
     out.push_str(&format!("Thread:  {}\n", thread_id));
     out.push_str(&format!("Email:   {}\n", email_id));
-    out.push_str(&format!("Unread:  {}\n", if unread { "true" } else { "false" }));
-    out.push_str(&format!("Attach:  {}\n", if has_att { "true" } else { "false" }));
+    out.push_str(&format!(
+        "Unread:  {}\n",
+        if unread { "true" } else { "false" }
+    ));
+    out.push_str(&format!(
+        "Attach:  {}\n",
+        if has_att { "true" } else { "false" }
+    ));
 
     if !preview.is_empty() {
         out.push_str("\nPreview:\n");
@@ -293,7 +292,13 @@ fn render_get(env: &Envelope<Value>) -> String {
                 let ty = a.get("type").and_then(|x| x.as_str()).unwrap_or("");
                 let size = a.get("size").and_then(|x| x.as_i64()).unwrap_or(0);
                 let blob = a.get("blobId").and_then(|x| x.as_str()).unwrap_or("");
-                out.push_str(&format!("- {}\t{}\t{}\t{}\n", sanitize_field(name), ty, size, blob));
+                out.push_str(&format!(
+                    "- {}\t{}\t{}\t{}\n",
+                    sanitize_field(name),
+                    ty,
+                    size,
+                    blob
+                ));
             }
         }
     }

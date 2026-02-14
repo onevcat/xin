@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::backend::{Backend, ModifyPlan, UploadedBlob};
 use crate::cli::{
     DraftsCreateArgs, DraftsDeleteArgs, DraftsDestroyArgs, DraftsGetArgs, DraftsListArgs,
-    DraftsRewriteArgs, DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
+    DraftsRewriteArgs, DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, ReplyArgs, SendArgs,
 };
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -84,63 +84,55 @@ fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> O
     None
 }
 
-/// Handle reply-related arguments:
-/// - Resolve the original email via RFC822 Message-ID (Email/query + header filter)
-/// - Build In-Reply-To / References headers
-/// - Infer recipients (reply / reply-all)
-///
-/// Returns: (reply_headers, to, cc)
-async fn handle_reply_args(
-    backend: &Backend,
-    args: &SendArgs,
-    self_email: &str,
-) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>), XinErrorOut> {
-    use std::collections::HashSet;
-
-    let reply_to_msg_id = args.reply_to_message_id.as_ref().ok_or_else(|| {
-        XinErrorOut::usage("--reply-to-message-id is required for reply functionality".to_string())
-    })?;
-
-    // Fetch original email by Message-ID (JMAP Email/get works on emailId, not Message-ID).
-    let original_email = backend
-        .get_email_by_message_id(
-            reply_to_msg_id,
-            Some(vec![
-                jmap_client::email::Property::Id,
-                jmap_client::email::Property::ThreadId,
-                jmap_client::email::Property::MessageId,
-                jmap_client::email::Property::References,
-                jmap_client::email::Property::From,
-                jmap_client::email::Property::To,
-                jmap_client::email::Property::Cc,
-            ]),
-        )
-        .await?
-        .ok_or_else(|| XinErrorOut::usage(format!("original email not found by Message-ID: {reply_to_msg_id}")))?;
-
-    // ---- headers
-
-    let orig_msg_id = original_email
+/// Build reply headers (In-Reply-To + References) from the original email.
+fn build_reply_headers(
+    original: &jmap_client::email::Email,
+) -> Result<Vec<(String, String)>, XinErrorOut> {
+    let orig_msg_id = original
         .message_id()
         .and_then(|ids| ids.first())
         .cloned()
         .ok_or_else(|| XinErrorOut::usage("original email missing Message-ID".to_string()))?;
 
-    let mut reply_headers: Vec<(String, String)> = Vec::new();
-    reply_headers.push(("In-Reply-To".to_string(), orig_msg_id.clone()));
+    let mut headers: Vec<(String, String)> = Vec::new();
+    headers.push(("In-Reply-To".to_string(), orig_msg_id.clone()));
 
-    // References: existing references + Message-ID (maintain thread)
     let mut refs: Vec<String> = Vec::new();
-    if let Some(existing_refs) = original_email.references() {
+    if let Some(existing_refs) = original.references() {
         refs.extend(existing_refs.iter().cloned());
     }
     refs.push(orig_msg_id);
-    reply_headers.push(("References".to_string(), refs.join(" ")));
+    headers.push(("References".to_string(), refs.join(" ")));
+    Ok(headers)
+}
 
-    // ---- recipients
+fn default_reply_subject(original_subject: Option<&str>) -> String {
+    let s = original_subject.unwrap_or("");
+    let trimmed = s.trim();
+    if trimmed.to_lowercase().starts_with("re:") {
+        trimmed.to_string()
+    } else if trimmed.is_empty() {
+        "Re:".to_string()
+    } else {
+        format!("Re: {trimmed}")
+    }
+}
+
+/// Infer reply recipients based on original email and reply args.
+///
+/// Rules:
+/// - If args.to is provided (override), use it as-is. Otherwise reply to original From.
+/// - If reply_all is set, include original To + Cc in CC (excluding self email).
+fn infer_reply_recipients(
+    original: &jmap_client::email::Email,
+    reply_all: bool,
+    override_to: &[String],
+    override_cc: &[String],
+    self_email: &str,
+) -> (Vec<String>, Vec<String>) {
+    use std::collections::HashSet;
 
     fn extract_email(s: &str) -> String {
-        // Accept either "Name <a@b.com>" or "a@b.com".
         if let (Some(l), Some(r)) = (s.rfind('<'), s.rfind('>')) {
             if l < r {
                 return s[l + 1..r].trim().to_string();
@@ -149,69 +141,63 @@ async fn handle_reply_args(
         s.trim().to_string()
     }
 
-    fn canonical_key(s: &str) -> String {
+    fn key(s: &str) -> String {
         extract_email(s).to_lowercase()
     }
 
     let self_key = self_email.to_lowercase();
 
-    let mut to: Vec<String> = args.to.clone();
-    let mut cc: Vec<String> = args.cc.clone();
+    let mut to: Vec<String> = override_to.to_vec();
+    let mut cc: Vec<String> = override_cc.to_vec();
 
     let mut seen: HashSet<String> = HashSet::new();
     for r in to.iter().chain(cc.iter()) {
-        seen.insert(canonical_key(r));
+        seen.insert(key(r));
     }
 
-    let mut add_to = |list: &mut Vec<String>, raw: String| {
-        let key = canonical_key(&raw);
-        if !seen.contains(&key) {
-            seen.insert(key);
+    let mut push_unique = |list: &mut Vec<String>, raw: String| {
+        let k = key(&raw);
+        if !seen.contains(&k) {
+            seen.insert(k);
             list.push(raw);
         }
     };
 
-    // Helper: use bare email for auto-populated recipients (most interoperable).
     let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String { a.email().to_string() };
 
-    // Add original From as primary recipient for reply modes:
-    // - reply: only when user didn't provide explicit --to
-    // - reply-all: always include original sender
-    // NOTE: We don't exclude self here - replying to yourself is valid.
-    if args.reply_all || args.to.is_empty() {
-        if let Some(from_addrs) = original_email.from() {
+    if to.is_empty() {
+        if let Some(from_addrs) = original.from() {
             for addr in from_addrs {
-                add_to(&mut to, fmt_addr(addr));
+                push_unique(&mut to, fmt_addr(addr));
             }
         }
     }
 
-    if args.reply_all {
-        // For reply-all, include original To + Cc in CC, excluding self.
-        let mut add_cc_excluding_self = |raw: String| {
-            let key = canonical_key(&raw);
-            if key == self_key {
+    if reply_all {
+        let mut push_cc = |raw: String| {
+            let k = key(&raw);
+            if k == self_key {
                 return;
             }
-            if !seen.contains(&key) {
-                seen.insert(key);
+            if !seen.contains(&k) {
+                seen.insert(k);
                 cc.push(raw);
             }
         };
 
-        if let Some(to_addrs) = original_email.to() {
+        if let Some(to_addrs) = original.to() {
             for addr in to_addrs {
-                add_cc_excluding_self(fmt_addr(addr));
+                push_cc(fmt_addr(addr));
             }
         }
-        if let Some(cc_addrs) = original_email.cc() {
+        if let Some(cc_addrs) = original.cc() {
             for addr in cc_addrs {
-                add_cc_excluding_self(fmt_addr(addr));
+                push_cc(fmt_addr(addr));
             }
         }
     }
 
-    Ok((reply_headers, to, cc))
+    (to, cc)
 }
 
 fn find_drafts_mailbox_id(
@@ -414,16 +400,7 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err("send", account, e),
     };
 
-    if args.reply_all && args.reply_to_message_id.is_none() {
-        return Envelope::err(
-            "send",
-            account,
-            XinErrorOut::usage("--reply-all requires --reply-to-message-id".to_string()),
-        );
-    }
-
-    // Resolve Drafts mailbox first (keeps the request ordering stable and avoids
-    // introducing new "early return" behavior changes).
+    // Resolve Drafts mailbox.
     let mailboxes = match backend.list_mailboxes().await {
         Ok(m) => m,
         Err(e) => return Envelope::err("send", account, e),
@@ -434,7 +411,6 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err("send", account, e),
     };
 
-    // Resolve identity early so reply-all can exclude self.
     let identities = match backend.list_identities().await {
         Ok(i) => i,
         Err(e) => return Envelope::err("send", account, e),
@@ -446,32 +422,8 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
             Err(e) => return Envelope::err("send", account, e),
         };
 
-    // Handle reply parameters: fetch original email and build headers/recipients.
-    let mut extra_headers: Vec<(String, String)> = Vec::new();
-    let (to, cc) = if args.reply_to_message_id.is_some() {
-        match handle_reply_args(&backend, args, &from_email).await {
-            Ok((h, to, cc)) => {
-                extra_headers.extend(h);
-                (to, cc)
-            }
-            Err(e) => return Envelope::err("send", account, e),
-        }
-    } else {
-        (args.to.clone(), args.cc.clone())
-    };
-
-    // Custom Reply-To header (allowed for both normal send and reply).
-    if let Some(reply_to) = &args.reply_to {
-        extra_headers.push(("Reply-To".to_string(), reply_to.clone()));
-    }
-
-    if to.is_empty() {
-        return Envelope::err(
-            "send",
-            account,
-            XinErrorOut::usage("missing recipients: provide --to (or use --reply-to-message-id)".to_string()),
-        );
-    }
+    let to = args.to.clone();
+    let cc = args.cc.clone();
 
     let text = match &args.text {
         Some(v) => Some(match read_text_arg(v) {
@@ -499,14 +451,13 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         );
     }
 
-
     let uploaded = match upload_attachments(&backend, &args.attach).await {
         Ok(v) => v,
         Err(e) => return Envelope::err("send", account, e),
     };
 
     let email = match backend
-        .create_draft_email_with_headers(
+        .create_draft_email(
             &drafts_id,
             from_name,
             from_email,
@@ -517,11 +468,6 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
             text.as_deref(),
             html.as_deref(),
             &uploaded,
-            if extra_headers.is_empty() {
-                None
-            } else {
-                Some(&extra_headers)
-            },
         )
         .await
     {
@@ -569,6 +515,181 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
     });
 
     Envelope::ok("send", account, data, Meta::default())
+}
+
+pub async fn reply(account: Option<String>, args: &ReplyArgs) -> Envelope<Value> {
+    let backend = match Backend::connect(account.as_deref()).await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    // Resolve Drafts mailbox.
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    // Resolve sending identity (needed for EmailSubmission and for reply-all self exclusion).
+    let identities = match backend.list_identities().await {
+        Ok(i) => i,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let (identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err("reply", account, e),
+        };
+
+    // Fetch original email by emailId.
+    let original = match backend
+        .get_email(
+            &args.email_id,
+            Some(vec![
+                jmap_client::email::Property::Id,
+                jmap_client::email::Property::ThreadId,
+                jmap_client::email::Property::MessageId,
+                jmap_client::email::Property::References,
+                jmap_client::email::Property::From,
+                jmap_client::email::Property::To,
+                jmap_client::email::Property::Cc,
+                jmap_client::email::Property::Subject,
+            ]),
+        )
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let Some(original) = original else {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage(format!("original email not found: {}", args.email_id)),
+        );
+    };
+
+    let headers = match build_reply_headers(&original) {
+        Ok(h) => h,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let (to, cc) =
+        infer_reply_recipients(&original, args.reply_all, &args.to, &args.cc, &from_email);
+
+    if to.is_empty() {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage("could not infer reply recipients (provide --to)".to_string()),
+        );
+    }
+
+    let subject = args
+        .subject
+        .clone()
+        .unwrap_or_else(|| default_reply_subject(original.subject()));
+
+    let text = match &args.text {
+        Some(v) => Some(match read_text_arg(v) {
+            Ok(t) => t,
+            Err(e) => return Envelope::err("reply", account, e),
+        }),
+        None => None,
+    };
+
+    let html = match &args.body_html {
+        Some(v) => Some(match read_text_arg(v) {
+            Ok(t) => t,
+            Err(e) => return Envelope::err("reply", account, e),
+        }),
+        None => None,
+    };
+
+    if text.is_none() && html.is_none() && args.attach.is_empty() {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage(
+                "missing message content: provide --text, --body-html, or --attach".to_string(),
+            ),
+        );
+    }
+
+    // Merge explicit BCC.
+    let bcc = args.bcc.clone();
+
+    let uploaded = match upload_attachments(&backend, &args.attach).await {
+        Ok(v) => v,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let email = match backend
+        .create_draft_email_with_headers(
+            &drafts_id,
+            from_name,
+            from_email,
+            &to,
+            &cc,
+            &bcc,
+            Some(&subject),
+            text.as_deref(),
+            html.as_deref(),
+            &uploaded,
+            Some(&headers),
+        )
+        .await
+    {
+        Ok(e) => e,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let email_id = match email.id() {
+        Some(id) => id.to_string(),
+        None => {
+            return Envelope::err(
+                "reply",
+                account,
+                XinErrorOut::config("Email/set did not return email id".to_string()),
+            );
+        }
+    };
+
+    let submission = match backend.submit_email(&email_id, &identity_id).await {
+        Ok(s) => s,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let uploaded_out = uploaded
+        .iter()
+        .map(|u| {
+            json!({
+                "blobId": u.blob_id,
+                "type": u.content_type,
+                "size": u.size,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let data = json!({
+        "draft": {
+            "emailId": email_id,
+            "threadId": email.thread_id()
+        },
+        "submission": {
+            "id": submission.id(),
+            "sendAt": to_rfc3339(submission.send_at())
+        },
+        "uploaded": uploaded_out
+    });
+
+    Envelope::ok("reply", account, data, Meta::default())
 }
 
 pub async fn drafts_list(account: Option<String>, args: &DraftsListArgs) -> Envelope<Value> {

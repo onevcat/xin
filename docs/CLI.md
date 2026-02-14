@@ -526,7 +526,7 @@ Per the RFC-first principle, xin will send standard requests and surface any ser
 
 **JMAP:** `Identity/get`
 
-### 4.1 `xin send --to ... --subject ... [--text <str|@file>] [--body-html <str|@file>] [--cc ...] [--bcc ...] [--attach <path>]... [--identity <id|email>] [--reply-to-message-id <msgid>] [--reply-all] [--reply-to <addr>]` (v0)
+### 4.1 `xin send --to ... --subject ... [--text <str|@file>] [--body-html <str|@file>] [--cc ...] [--bcc ...] [--attach <path>]... [--identity <id|email>]` (v0)
 **gog analog:** `gog gmail send ...`
 **JSON schema:** SCHEMA.md §7.2
 
@@ -535,21 +535,6 @@ Body input:
 - `--body-html` accepts a literal string or `@/path/to/file.html`.
 - At least one of `--text`, `--body-html`, `--attach` must be provided.
 
-Reply support (v0):
-- `--reply-to-message-id <msgid>`: reply to a message identified by RFC822 `Message-ID`.
-  - xin resolves the original email via JMAP `Email/query` + `header: ["Message-ID", "<msgid>"]`.
-  - Adds headers:
-    - `In-Reply-To: <original-message-id>`
-    - `References: <existing-refs> <original-message-id>`
-- `--reply-all`: include original recipients:
-  - original `From` is added to `To` (unless already present)
-  - original `To` + `Cc` are added to `Cc`
-  - the sending identity's email is excluded from the auto-added recipients
-  - requires `--reply-to-message-id`
-- `--reply-to <addr>`: sets the `Reply-To` header for the outgoing message (works for both normal send and replies).
-
-Constraints:
-- `--to` is optional when `--reply-to-message-id` is provided; otherwise `--to` is required.
 
 Behavior (v0):
 - Resolves the Drafts mailbox id (role=`drafts`).
@@ -566,7 +551,23 @@ Behavior (v0):
 
 - If a server rejects an upload or references an unknown blobId, xin reports the server’s standard error (e.g. `blobNotFound`) verbatim in structured output.
 
-### 4.2 `xin drafts list|get|create|update|delete|send`
+### 4.2 `xin reply <emailId> [--reply-all] [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--text ... | --body-html ... | --attach ...] [--identity <id|email>]` (v0)
+**gog analog:** `gog gmail reply`
+**JSON schema:** SCHEMA.md §7.2 (same as send)
+
+Behavior (v0):
+- `<emailId>` is the JMAP Email id (from `xin search`, `xin messages search`, or `xin inbox next`).
+- xin fetches the original email via `Email/get` to read `messageId`, `references`, `from`, `to`, `cc`, and `subject`.
+- Adds reply threading headers to the outgoing draft:
+  - `In-Reply-To: <original-message-id>`
+  - `References: <existing-refs> <original-message-id>`
+- Recipient inference:
+  - If `--to` is not provided, reply to original `From`.
+  - If `--reply-all` is set, include original `To` + `Cc` into `Cc` (excluding the sending identity).
+- If `--subject` is not provided, xin uses `Re: <original subject>`.
+- Body/attachments follow the same rules as `xin send`.
+
+### 4.3 `xin drafts list|get|create|update|delete|send`
 **gog analog:** `gog gmail drafts ...`
 **JSON schema:** SCHEMA.md §7.3
 

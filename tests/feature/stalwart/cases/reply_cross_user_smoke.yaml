@@ -1,0 +1,222 @@
+id: reply_cross_user_smoke
+it: "reply smoke: alice<->bob reply infers recipients + sets threading headers"
+requiresFresh: false
+
+seed:
+  domain: example.org
+  users:
+    - user: alice
+      pass: alice-pass
+    - user: bob
+      pass: bob-pass
+
+env:
+  XIN_BASE_URL: http://127.0.0.1:39090
+
+steps:
+  # --- Bob -> Alice, then Alice replies
+  - name: bob-send-to-alice
+    say:
+      - "Given bob is authenticated"
+      - "When bob sends a message to alice"
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - send
+        - --to
+        - alice@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] cross-reply bob->alice orig"
+        - --text
+        - "hi alice"
+
+  - name: alice-wait-visible
+    say:
+      - "Then alice should see bob's message in her inbox"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - in:inbox subject:cross-reply bob->alice orig
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      aliceInEmailId: /data/items/0/emailId
+
+  - name: alice-get-orig-message-id
+    say:
+      - "And alice can read original Message-ID"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - get
+        - ${aliceInEmailId}
+        - --format
+        - metadata
+        - --headers
+        - message-id
+    expect:
+      - path: /data/email/headers/message-id
+        exists: true
+    save:
+      bobToAliceMsgId: /data/email/headers/message-id
+
+  - name: alice-reply-to-bob
+    say:
+      - "When alice replies to bob"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - reply
+        - ${aliceInEmailId}
+        - --subject
+        - "[xin-case:${caseId}:${runId}] cross-reply alice->bob reply"
+        - --text
+        - "replying to you"
+    expect:
+      - path: /ok
+        equals: true
+    save:
+      aliceReplyDraftId: /data/draft/emailId
+
+  - name: alice-reply-headers
+    say:
+      - "And reply draft should have threading headers and inferred recipient (To=bob)"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - get
+        - ${aliceReplyDraftId}
+        - --format
+        - metadata
+        - --headers
+        - in-reply-to,references,to,cc
+    expect:
+      - path: /data/email/headers/in-reply-to
+        equals: ${bobToAliceMsgId}
+      - path: /data/email/headers/references/0
+        equals: ${bobToAliceMsgId}
+      - path: /data/email/headers/to/0/email
+        equals: bob@example.org
+      - path: /data/email/headers/cc
+        exists: false
+
+  # --- Alice -> Bob, then Bob replies
+  - name: alice-send-to-bob
+    say:
+      - "When alice sends a message to bob"
+    env:
+      XIN_BASIC_USER: alice
+      XIN_BASIC_PASS: alice-pass
+    xin:
+      args:
+        - send
+        - --to
+        - bob@example.org
+        - --subject
+        - "[xin-case:${caseId}:${runId}] cross-reply alice->bob orig"
+        - --text
+        - "hi bob"
+
+  - name: bob-wait-visible
+    say:
+      - "Then bob should see alice's message in his inbox"
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    retry:
+      attempts: 40
+      sleepMs: 500
+    xin:
+      args:
+        - messages
+        - search
+        - in:inbox subject:cross-reply alice->bob orig
+        - --max
+        - "10"
+    expect:
+      - path: /data/items/0/emailId
+        exists: true
+    save:
+      bobInEmailId: /data/items/0/emailId
+
+  - name: bob-get-orig-message-id
+    say:
+      - "And bob can read original Message-ID"
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - get
+        - ${bobInEmailId}
+        - --format
+        - metadata
+        - --headers
+        - message-id
+    expect:
+      - path: /data/email/headers/message-id
+        exists: true
+    save:
+      aliceToBobMsgId: /data/email/headers/message-id
+
+  - name: bob-reply-to-alice
+    say:
+      - "When bob replies to alice"
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - reply
+        - ${bobInEmailId}
+        - --subject
+        - "[xin-case:${caseId}:${runId}] cross-reply bob->alice reply"
+        - --text
+        - "replying back"
+    expect:
+      - path: /ok
+        equals: true
+    save:
+      bobReplyDraftId: /data/draft/emailId
+
+  - name: bob-reply-headers
+    say:
+      - "And reply draft should have threading headers and inferred recipient (To=alice)"
+    env:
+      XIN_BASIC_USER: bob
+      XIN_BASIC_PASS: bob-pass
+    xin:
+      args:
+        - get
+        - ${bobReplyDraftId}
+        - --format
+        - metadata
+        - --headers
+        - in-reply-to,references,to,cc
+    expect:
+      - path: /data/email/headers/in-reply-to
+        equals: ${aliceToBobMsgId}
+      - path: /data/email/headers/references/0
+        equals: ${aliceToBobMsgId}
+      - path: /data/email/headers/to/0/email
+        equals: alice@example.org
+      - path: /data/email/headers/cc
+        exists: false

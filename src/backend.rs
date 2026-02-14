@@ -78,106 +78,6 @@ impl Backend {
             })
     }
 
-    /// Lookup an email by RFC822 Message-ID header, then fetch it via Email/get.
-    ///
-    /// NOTE: JMAP Email/get operates on JMAP Email ids, not Message-ID.
-    pub async fn get_email_by_message_id(
-        &self,
-        message_id: &str,
-        properties: Option<Vec<jmap_client::email::Property>>,
-    ) -> Result<Option<Email>, XinErrorOut> {
-        use jmap_client::core::query::Filter as CoreFilter;
-        use jmap_client::email::query;
-
-        let client = self.j.client();
-        // Some servers expose `messageId` without surrounding angle brackets.
-        // Accept both forms to keep the CLI ergonomic.
-        let mut candidates: Vec<String> = Vec::new();
-        let raw = message_id.trim();
-        candidates.push(raw.to_string());
-        if raw.starts_with('<') && raw.ends_with('>') && raw.len() > 2 {
-            candidates.push(raw[1..raw.len() - 1].to_string());
-        } else {
-            candidates.push(format!("<{raw}>"));
-        }
-        candidates.dedup();
-
-        let query_ids = |filter: Option<CoreFilter<query::Filter>>, limit: usize| async move {
-            let mut request = client.build();
-            let q = request.query_email();
-            if let Some(filter) = filter {
-                q.filter(filter);
-            }
-            q.sort([query::Comparator::received_at().descending()]);
-            q.limit(limit);
-
-            request
-                .send_single::<jmap_client::core::query::QueryResponse>()
-                .await
-                .map(|mut r| r.take_ids())
-                .map_err(|e| XinErrorOut {
-                    kind: "jmapRequestError".to_string(),
-                    message: format!("Email/query failed: {e}"),
-                    http: None,
-                    jmap: None,
-                })
-        };
-
-        // 1) Try strict header match
-        let mut conds: Vec<CoreFilter<query::Filter>> = Vec::new();
-        for c in &candidates {
-            conds.push(query::Filter::header("Message-ID", Some(c.clone())).into());
-        }
-        let header_filter = if conds.len() == 1 {
-            conds.remove(0)
-        } else {
-            CoreFilter::or(conds)
-        };
-
-        let mut ids = query_ids(Some(header_filter), 2).await?;
-
-        // 2) Fallback: text search (some servers may not support header filter)
-        if ids.is_empty() {
-            let mut text_conds: Vec<CoreFilter<query::Filter>> = Vec::new();
-            for c in &candidates {
-                text_conds.push(query::Filter::text(c.clone()).into());
-            }
-            let text_filter = if text_conds.len() == 1 {
-                text_conds.remove(0)
-            } else {
-                CoreFilter::or(text_conds)
-            };
-            ids = query_ids(Some(text_filter), 2).await?;
-        }
-
-        // 3) Fallback: scan recent messages and match by messageId property.
-        if ids.is_empty() {
-            let recent_ids = query_ids(None, 50).await?;
-            for id in &recent_ids {
-                let email = self
-                    .get_email(id, Some(vec![jmap_client::email::Property::MessageId]))
-                    .await?
-                    .and_then(|e| e.message_id().and_then(|ids| ids.first().cloned()));
-                if let Some(msgid) = email {
-                    if candidates.iter().any(|c| c == &msgid) {
-                        return self.get_email(id, properties).await;
-                    }
-                }
-            }
-        }
-
-        if ids.is_empty() {
-            return Ok(None);
-        }
-        if ids.len() > 1 {
-            return Err(XinErrorOut::usage(format!(
-                "multiple emails matched Message-ID: {message_id}"
-            )));
-        }
-
-        self.get_email(&ids[0], properties).await
-    }
-
     pub async fn get_email_full(
         &self,
         email_id: &str,
@@ -866,7 +766,6 @@ impl Backend {
                 jmap: None,
             })
     }
-
 
     pub async fn modify_emails(
         &self,

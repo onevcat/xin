@@ -384,7 +384,10 @@ pub async fn thread_attachments(
     )
 }
 
-pub async fn attachment_download(account: Option<String>, args: &AttachmentArgs) -> Envelope<Value> {
+pub async fn attachment_download(
+    account: Option<String>,
+    args: &AttachmentArgs,
+) -> Envelope<Value> {
     let command_name = "attachment";
 
     let backend = match Backend::connect(account.as_deref()).await {
