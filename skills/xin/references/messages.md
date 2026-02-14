@@ -54,3 +54,7 @@ Examples:
   xin messages search --filter-json @filter.json --max 50
   xin --plain messages search "subject:meeting" --max 5
 ```
+
+## JSON Schema
+
+Response: [_schemas/search.json](./_schemas/search.json)

@@ -33,4 +33,4 @@ Examples:
 
 ## JSON Schema
 
-Response: (binary download, no JSON response)
+Response: [_schemas/attachment.json](./_schemas/attachment.json)

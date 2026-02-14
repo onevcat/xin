@@ -41,4 +41,4 @@ Notes:
 
 ## JSON Schema
 
-Response: (NDJSON stream, see SCHEMA.md for details)
+Response: [_schemas/meta.json](./_schemas/meta.json)

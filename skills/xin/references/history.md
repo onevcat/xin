@@ -34,4 +34,4 @@ Paging:
 
 ## JSON Schema
 
-Response: (state/changes tracking, see SCHEMA.md for details)
+Response: [_schemas/meta.json](./_schemas/meta.json)

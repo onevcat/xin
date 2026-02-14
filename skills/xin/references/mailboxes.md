@@ -165,4 +165,4 @@ Options:
 
 ## JSON Schema
 
-Response: [_schemas/labels-list.json](./_schemas/labels-list.json), [_schemas/mailbox.json](./_schemas/mailbox.json)
+Response: [_schemas/labels-list.json](./_schemas/labels-list.json)

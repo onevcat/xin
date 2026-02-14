@@ -68,4 +68,4 @@ Options:
 
 ## JSON Schema
 
-Response: (identity list/get, see SCHEMA.md for details)
+Response: [_schemas/address.json](./_schemas/address.json)

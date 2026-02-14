@@ -23,3 +23,7 @@ Options:
       --verbose            Verbose logging
   -h, --help               Print help
 ```
+
+## JSON Schema
+
+Response: [_schemas/batch-modify.json](./_schemas/batch-modify.json)

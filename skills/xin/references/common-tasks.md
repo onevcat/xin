@@ -5,7 +5,7 @@ This doc is a curated, **workflow-first** guide for using `xin` to help a human 
 If you need the full flag/option reference, use:
 - [commands](./commands.md)
 - Per-command docs under `./*.md`
-- JSON contract: [SCHEMA.md](./SCHEMA.md)
+- JSON contract: [_schemas/index.json](./_schemas/index.json)
 
 ---
 

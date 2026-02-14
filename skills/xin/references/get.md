@@ -45,8 +45,8 @@ Examples:
 Notes:
   - --format metadata is fast and stable for agents.
   - --format full may include truncation warnings in meta.warnings.
+```
 
 ## JSON Schema
 
-Response: [_schemas/get.json](./_schemas/get.json), [_schemas/email-metadata.json](./_schemas/email-metadata.json), [_schemas/body.json](./_schemas/body.json), [_schemas/attachment.json](./_schemas/attachment.json)
-```
+Response: [_schemas/get.json](./_schemas/get.json)

@@ -181,6 +181,39 @@ function generateCommandDoc(cmd: CommandInfo): string {
     }
   }
 
+  // Add JSON Schema reference section (maps command to schema file)
+  const schemaMapping: Record<string, string> = {
+    "search": "search.json",
+    "messages": "search.json",
+    "get": "get.json",
+    "inbox": "inbox-next.json",
+    "batch": "batch-modify.json",
+    "send": "send.json",
+    "labels": "labels-list.json",
+    "mailboxes": "labels-list.json",
+    "drafts": "search.json", // uses search-item schema
+    "thread": "search-item.json",
+    "attachment": "attachment.json",
+    "history": "meta.json",
+    "watch": "meta.json",
+    "identities": "address.json",
+    "config": null,
+    "auth": null,
+    "archive": "batch-modify.json",
+    "read": "batch-modify.json",
+    "unread": "batch-modify.json",
+    "trash": "batch-modify.json",
+    "url": null,
+  }
+
+  const schemaFile = schemaMapping[cmdName]
+  if (schemaFile) {
+    lines.push("")
+    lines.push("## JSON Schema")
+    lines.push("")
+    lines.push(`Response: [_schemas/${schemaFile}](./_schemas/${schemaFile})`)
+  }
+
   return lines.join("\n")
 }
 

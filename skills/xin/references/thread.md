@@ -232,4 +232,4 @@ Options:
 
 ## JSON Schema
 
-Response: (thread get with optional full emails, see SCHEMA.md)
+Response: [_schemas/search-item.json](./_schemas/search-item.json)

@@ -98,7 +98,7 @@ xin send --to user@example.com --subject "Hello" --text @/tmp/body.txt
 
 For common workflows and examples, see [common-tasks](./references/common-tasks.md).
 
-For JSON output schema, see [SCHEMA.md](./references/SCHEMA.md).
+For JSON output schema, see [JSON Schemas](./references/_schemas/index.json).
 
 ## Discovering Options
 

@@ -266,4 +266,4 @@ Options:
 
 ## JSON Schema
 
-Response: (uses same schema as search for list, get for get)
+Response: [_schemas/search.json](./_schemas/search.json)
