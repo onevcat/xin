@@ -188,6 +188,189 @@ async fn send_text_works_against_mock_jmap() {
 }
 
 #[tokio::test]
+async fn send_reply_infers_recipients_and_sets_threading_headers() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/.well-known/jmap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mock_session(&server)))
+        .mount(&server)
+        .await;
+
+    let mailbox_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Mailbox/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "mb1",
+                    "name": "Drafts",
+                    "role": "drafts"
+                }],
+                "notFound": []
+            }, "m0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Mailbox/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(mailbox_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let identity_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Identity/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "i1",
+                    "name": "Me",
+                    "email": "me@example.com"
+                }],
+                "notFound": []
+            }, "i0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Identity/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(identity_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Resolve original by Message-ID via Email/query
+    let query_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/query", {
+                "accountId": "A",
+                "queryState": "s",
+                "canCalculateChanges": false,
+                "position": 0,
+                "ids": ["orig1"],
+                "total": 1,
+                "limit": 2
+            }, "q0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/query"))
+        .and(body_string_contains("Message-ID"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(query_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // Fetch original via Email/get
+    let get_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/get", {
+                "accountId": "A",
+                "state": "s",
+                "list": [{
+                    "id": "orig1",
+                    "threadId": "t1",
+                    "messageId": ["<orig@example.com>"],
+                    "references": ["<r0@example.com>"],
+                    "from": [{"name": "Alice", "email": "alice@example.com"}],
+                    "to": [{"name": null, "email": "me@example.com"}],
+                    "cc": [{"name": null, "email": "cc1@example.com"}]
+                }],
+                "notFound": []
+            }, "g0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/get"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(get_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let email_set_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["Email/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {
+                    "c0": { "id": "m1", "threadId": "t1" }
+                }
+            }, "e0"]
+        ]
+    });
+
+    // Ensure threading headers are present in Email/set create.
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("Email/set"))
+        .and(body_string_contains("In-Reply-To"))
+        .and(body_string_contains("References"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let submission_response = json!({
+        "sessionState": "s",
+        "methodResponses": [
+            ["EmailSubmission/set", {
+                "accountId": "A",
+                "oldState": "s",
+                "newState": "s",
+                "created": {
+                    "c0": { "id": "s1", "emailId": "m1" }
+                }
+            }, "s0"]
+        ]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/jmap"))
+        .and(body_string_contains("EmailSubmission/set"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(submission_response))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = Command::new(assert_cmd::cargo::cargo_bin!("xin"))
+        .env("XIN_BASE_URL", server.uri())
+        .env("XIN_TOKEN", "test-token")
+        .args([
+            "send",
+            "--reply-to-message-id",
+            "<orig@example.com>",
+            "--subject",
+            "Re: Hi",
+            "--text",
+            "Hello reply",
+        ])
+        .output()
+        .expect("run");
+
+    assert!(
+        output.status.success(),
+        "xin failed. status={:?}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[tokio::test]
 async fn send_unknown_identity_is_rejected_before_any_side_effects() {
     let server = MockServer::start().await;
 
