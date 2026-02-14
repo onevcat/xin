@@ -50,4 +50,8 @@ Examples:
 Tips:
   - Quote multi-term queries.
   - Use --filter-json for precise server-owned filters (accepts @/path.json).
+
+## JSON Schema
+
+Response: [_schemas/search.json](./_schemas/search.json) (items: [_schemas/search-item.json](./_schemas/search-item.json))
 ```

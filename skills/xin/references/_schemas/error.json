@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin Error",
+  "description": "Error details when xin command fails",
+  "type": "object",
+  "required": ["kind", "message"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "xinUsageError",
+        "xinParseError",
+        "xinConfigError",
+        "xinNotImplemented",
+        "httpError",
+        "jmapRequestError",
+        "jmapMethodError"
+      ],
+      "description": "Error category"
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable error summary"
+    },
+    "http": {
+      "type": ["object", "null"],
+      "description": "HTTP-level error info",
+      "properties": {
+        "status": { "type": "integer" },
+        "problem": { "type": ["object", "null"] }
+      }
+    },
+    "jmap": {
+      "type": ["object", "null"],
+      "description": "JMAP error details",
+      "properties": {
+        "type": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "method": { "type": ["string", "null"] },
+        "details": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

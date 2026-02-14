@@ -38,3 +38,7 @@ Notes:
   - Default output is NDJSON stream for agents.
   - Use --no-envelope (or --plain) for stream-only output.
 ```
+
+## JSON Schema
+
+Response: (NDJSON stream, see SCHEMA.md for details)

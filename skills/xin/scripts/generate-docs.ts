@@ -24,6 +24,8 @@ const PRESERVED_FILES: string[] = [
   "SCHEMA.md",
   // commands.md is manually curated (merged with high-level overview)
   "commands.md",
+  // _schemas/ - JSON schemas for agents (not generated, hand-crafted)
+  "_schemas",
 ]
 
 // Commands to skip (not useful for docs, or pseudo-commands like clap's `help`)
@@ -238,15 +240,17 @@ async function main() {
   // Ensure references directory exists
   await Deno.mkdir(REFERENCES_DIR, { recursive: true })
 
-  // Get list of preserved files to keep
+  // Get list of preserved paths to keep (files and directories)
   const preservedPaths = new Set(
     PRESERVED_FILES.map((f) => path.join(REFERENCES_DIR, f)),
   )
 
-  // Clean up old generated files (but preserve manual files)
+  // Clean up old generated files (but preserve manual files and directories)
   for await (const entry of Deno.readDir(REFERENCES_DIR)) {
     const filePath = path.join(REFERENCES_DIR, entry.name)
-    if (!preservedPaths.has(filePath) && entry.name.endsWith(".md")) {
+    // Skip if it's a preserved file OR a preserved directory
+    const isPreserved = preservedPaths.has(filePath)
+    if (!isPreserved && entry.name.endsWith(".md")) {
       await Deno.remove(filePath)
     }
   }

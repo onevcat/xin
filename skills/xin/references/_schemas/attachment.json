@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin attachment",
+  "description": "Attachment metadata",
+  "type": "object",
+  "required": ["emailId", "blobId", "name", "type", "size", "disposition"],
+  "properties": {
+    "emailId": { "type": "string" },
+    "blobId": { "type": "string", "description": "JMAP blob ID for download" },
+    "name": { "type": "string" },
+    "type": { "type": "string", "description": "Content-Type" },
+    "size": { "type": "integer", "description": "Size in bytes" },
+    "disposition": { "type": ["string", "null"], "description": "Content-Disposition" }
+  }
+}

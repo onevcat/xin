@@ -65,3 +65,7 @@ Options:
       --verbose            Verbose logging
   -h, --help               Print help
 ```
+
+## JSON Schema
+
+Response: (identity list/get, see SCHEMA.md for details)

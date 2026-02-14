@@ -229,3 +229,7 @@ Options:
       --verbose            Verbose logging
   -h, --help               Print help
 ```
+
+## JSON Schema
+
+Response: (thread get with optional full emails, see SCHEMA.md)

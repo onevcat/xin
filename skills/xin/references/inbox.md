@@ -78,3 +78,7 @@ Options:
       --verbose            Verbose logging
   -h, --help               Print help
 ```
+
+## JSON Schema
+
+Response: [_schemas/inbox-next.json](./_schemas/inbox-next.json)

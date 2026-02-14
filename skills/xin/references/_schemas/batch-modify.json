@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin batch modify",
+  "description": "Response schema for xin batch modify command",
+  "type": "object",
+  "required": ["appliedTo", "changes", "dryRun"],
+  "properties": {
+    "appliedTo": {
+      "type": "object",
+      "properties": {
+        "emailIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "changes": {
+      "type": "object",
+      "properties": {
+        "mailboxIds": {
+          "type": "object",
+          "properties": {
+            "added": { "type": "array", "items": { "type": "string" } },
+            "removed": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "keywords": {
+          "type": "object",
+          "properties": {
+            "added": { "type": "array", "items": { "type": "string" } },
+            "removed": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "dryRun": { "type": "boolean" }
+  }
+}

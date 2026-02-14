@@ -31,3 +31,7 @@ Examples:
 Paging:
   - If meta.nextPage is set, continue with: xin history --page <TOKEN>
 ```
+
+## JSON Schema
+
+Response: (state/changes tracking, see SCHEMA.md for details)

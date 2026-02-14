@@ -162,3 +162,7 @@ Options:
       --verbose                  Verbose logging
   -h, --help                     Print help
 ```
+
+## JSON Schema
+
+Response: [_schemas/labels-list.json](./_schemas/labels-list.json), [_schemas/mailbox.json](./_schemas/mailbox.json)

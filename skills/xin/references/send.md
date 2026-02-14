@@ -33,3 +33,7 @@ Examples:
   xin send --to bob@example.com --subject "Hello" --body-html @body.html
   xin send --to bob@example.com --subject "Hello" --text "hi" --identity alice@example.com
 ```
+
+## JSON Schema
+
+Response: [_schemas/send.json](./_schemas/send.json)

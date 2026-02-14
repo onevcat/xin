@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin get",
+  "description": "Response schema for xin get command",
+  "type": "object",
+  "required": ["email", "body", "attachments", "raw"],
+  "properties": {
+    "email": {
+      "$ref": "email-metadata.json"
+    },
+    "body": {
+      "$ref": "body.json"
+    },
+    "attachments": {
+      "type": "array",
+      "items": { "$ref": "attachment.json" }
+    },
+    "raw": {
+      "type": ["object", "null"],
+      "description": "Raw JMAP Email object, non-null only with --format raw"
+    }
+  }
+}

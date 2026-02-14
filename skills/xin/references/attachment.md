@@ -30,3 +30,7 @@ Examples:
   xin attachment <emailId> <blobId> --out ./file.bin
   xin --plain attachment <emailId> <blobId>
 ```
+
+## JSON Schema
+
+Response: (binary download, no JSON response)

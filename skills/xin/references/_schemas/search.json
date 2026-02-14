@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin search",
+  "description": "Response schema for xin search command (thread-like results)",
+  "type": "object",
+  "required": ["items"],
+  "properties": {
+    "items": {
+      "type": "array",
+      "description": "Array of thread summaries (one per thread when collapseThreads=true)",
+      "items": {
+        "$ref": "search-item.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin body",
+  "description": "Email body structure",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": ["string", "null"],
+      "description": "Plain text body"
+    },
+    "html": {
+      "type": ["string", "null"],
+      "description": "HTML body"
+    },
+    "textMeta": {
+      "$ref": "body-meta.json"
+    },
+    "htmlMeta": {
+      "$ref": "body-meta.json"
+    }
+  }
+}

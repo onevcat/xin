@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin body meta",
+  "description": "Body truncation/encoding metadata",
+  "type": "object",
+  "properties": {
+    "isTruncated": {
+      "type": "boolean",
+      "description": "Whether body was truncated due to maxBodyValueBytes limit"
+    },
+    "isEncodingProblem": {
+      "type": "boolean",
+      "description": "Whether there was an encoding issue decoding the body"
+    }
+  }
+}

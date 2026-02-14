@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin schemas index",
+  "description": "Index of all xin JSON schemas for agent discovery",
+  "type": "object",
+  "schemas": {
+    "envelope": {
+      "$ref": "envelope.json"
+    },
+    "meta": {
+      "$ref": "meta.json"
+    },
+    "error": {
+      "$ref": "error.json"
+    },
+    "search": {
+      "$ref": "search.json",
+      "description": "xin search / messages search response"
+    },
+    "search-item": {
+      "$ref": "search-item.json",
+      "description": "Thread summary in search results"
+    },
+    "get": {
+      "$ref": "get.json",
+      "description": "xin get response"
+    },
+    "email-metadata": {
+      "$ref": "email-metadata.json",
+      "description": "Email metadata (headers, recipients, etc)"
+    },
+    "body": {
+      "$ref": "body.json",
+      "description": "Email body structure"
+    },
+    "body-meta": {
+      "$ref": "body-meta.json",
+      "description": "Body truncation/encoding info"
+    },
+    "attachment": {
+      "$ref": "attachment.json",
+      "description": "Attachment metadata"
+    },
+    "inbox-next": {
+      "$ref": "inbox-next.json",
+      "description": "xin inbox next response"
+    },
+    "batch-modify": {
+      "$ref": "batch-modify.json",
+      "description": "xin batch modify response"
+    },
+    "labels-list": {
+      "$ref": "labels-list.json",
+      "description": "xin labels/mailboxes list response"
+    },
+    "mailbox": {
+      "$ref": "mailbox.json",
+      "description": "Mailbox (label) metadata"
+    },
+    "send": {
+      "$ref": "send.json",
+      "description": "xin send response"
+    },
+    "address": {
+      "$ref": "address.json",
+      "description": "Email address with optional name"
+    }
+  }
+}

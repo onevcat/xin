@@ -263,3 +263,7 @@ Options:
       --verbose              Verbose logging
   -h, --help                 Print help
 ```
+
+## JSON Schema
+
+Response: (uses same schema as search for list, get for get)

@@ -65,7 +65,23 @@ xin --plain search "subject:invoice" --max 5
 
 ---
 
-## Related Docs
+## JSON Schemas (for agents)
 
-- Common workflows: [common-tasks.md](./common-tasks.md)
-- JSON output schema: [SCHEMA.md](./SCHEMA.md)
+Agent-first schema reference for programmatic use:
+
+- **Schema index**: [_schemas/index.json](./_schemas/index.json) - All schemas with descriptions
+- **Envelope**: [_schemas/envelope.json](./_schemas/envelope.json) - Top-level response wrapper
+- **Meta**: [_schemas/meta.json](./_schemas/meta.json) - Pagination, warnings, debug
+- **Error**: [_schemas/error.json](./_schemas/error.json) - Error response shapes
+- **Common types**:
+  - [_schemas/address.json](./_schemas/address.json) - Email address
+  - [_schemas/mailbox.json](./_schemas/mailbox.json) - Mailbox/label
+  - [_schemas/attachment.json](./_schemas/attachment.json) - Attachment metadata
+- **Command responses**:
+  - [_schemas/search.json](./_schemas/search.json) - Search results
+  - [_schemas/get.json](./_schemas/get.json) - Get email
+  - [_schemas/inbox-next.json](./_schemas/inbox-next.json) - Inbox next
+  - [_schemas/batch-modify.json](./_schemas/batch-modify.json) - Batch modify
+  - [_schemas/send.json](./_schemas/send.json) - Send response
+
+For a human-readable schema guide, see: [SCHEMA.md](./SCHEMA.md)
