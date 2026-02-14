@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin Envelope",
+  "description": "Top-level envelope for all xin JSON outputs",
+  "type": "object",
+  "required": ["schemaVersion", "ok", "command", "data", "error", "meta"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "description": "Schema version, e.g. '0.1'",
+      "const": "0.1"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "Whether the command succeeded"
+    },
+    "command": {
+      "type": "string",
+      "description": "The invoked command, e.g. 'search', 'get', 'labels.list'"
+    },
+    "account": {
+      "type": ["string", "null"],
+      "description": "Account name from config, null if not applicable"
+    },
+    "data": {
+      "type": ["object", "null"],
+      "description": "Command-specific payload"
+    },
+    "error": {
+      "type": ["object", "null"],
+      "description": "Error details when ok=false",
+      "oneOf": [
+        { "$ref": "error.json" },
+        { "type": "null" }
+      ]
+    },
+    "meta": {
+      "$ref": "meta.json"
+    }
+  }
+}

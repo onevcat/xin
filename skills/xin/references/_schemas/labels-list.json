@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin labels list",
+  "description": "Response schema for xin labels/mailboxes list command",
+  "type": "object",
+  "required": ["mailboxes"],
+  "properties": {
+    "mailboxes": {
+      "type": "array",
+      "items": { "$ref": "mailbox.json" }
+    }
+  }
+}

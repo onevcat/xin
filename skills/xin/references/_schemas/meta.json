@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin Meta",
+  "description": "Common meta fields for xin responses",
+  "type": "object",
+  "properties": {
+    "requestId": {
+      "type": ["string", "null"],
+      "description": "xin-generated request identifier"
+    },
+    "nextPage": {
+      "type": ["string", "null"],
+      "description": "Opaque cursor for --page pagination"
+    },
+    "warnings": {
+      "type": ["array", "null"],
+      "description": "Non-fatal warnings, e.g. body truncation",
+      "items": { "type": "string" }
+    },
+    "debug": {
+      "type": ["object", "null"],
+      "description": "Debug info - NOT STABLE, only present with --verbose"
+    }
+  }
+}

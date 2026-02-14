@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin search item",
+  "description": "Single thread summary in search results",
+  "type": "object",
+  "required": ["threadId", "emailId", "receivedAt", "subject", "from", "to", "snippet", "hasAttachment", "mailboxIds", "keywords", "unread"],
+  "properties": {
+    "threadId": {
+      "type": "string",
+      "description": "JMAP thread ID"
+    },
+    "emailId": {
+      "type": "string",
+      "description": "Representative email ID for the thread"
+    },
+    "receivedAt": {
+      "type": ["string", "null"],
+      "description": "RFC3339 timestamp, UTC"
+    },
+    "subject": {
+      "type": ["string", "null"],
+      "description": "Email subject"
+    },
+    "from": {
+      "type": "array",
+      "items": { "$ref": "address.json" },
+      "description": "Sender addresses"
+    },
+    "to": {
+      "type": "array",
+      "items": { "$ref": "address.json" },
+      "description": "Recipient addresses"
+    },
+    "snippet": {
+      "type": ["string", "null"],
+      "description": "Server-provided preview text"
+    },
+    "hasAttachment": {
+      "type": "boolean"
+    },
+    "mailboxIds": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" },
+      "description": "Map of mailbox ID to membership"
+    },
+    "keywords": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" },
+      "description": "Keywords map, e.g. {\"$seen\": true}"
+    },
+    "unread": {
+      "type": "boolean",
+      "description": "Derived: true if $seen is absent"
+    }
+  }
+}

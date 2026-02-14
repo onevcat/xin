@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "xin send",
+  "description": "Response schema for xin send command",
+  "type": "object",
+  "required": ["draft", "submission", "uploaded"],
+  "properties": {
+    "draft": {
+      "type": "object",
+      "properties": {
+        "emailId": { "type": "string" },
+        "threadId": { "type": "string" }
+      }
+    },
+    "submission": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sendAt": { "type": ["string", "null"] }
+      }
+    },
+    "uploaded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "blobId": { "type": "string" },
+          "type": { "type": "string" },
+          "size": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
