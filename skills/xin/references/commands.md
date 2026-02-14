@@ -84,4 +84,4 @@ Agent-first schema reference for programmatic use:
   - [_schemas/batch-modify.json](./_schemas/batch-modify.json) - Batch modify
   - [_schemas/send.json](./_schemas/send.json) - Send response
 
-For a human-readable schema guide, see: [SCHEMA.md](./SCHEMA.md)
+
