@@ -63,6 +63,34 @@ Collect uploaded blobs into the output (`SCHEMA.md §7.2.uploaded`).
 
 ## 3) Create draft via Email/set (RFC 8621 §4.6)
 
+### 3.x Reply headers (v0)
+
+When `xin send` is invoked with `--reply-to-message-id <msgid>`:
+
+1) Resolve the original email id (JMAP Email id) by querying the RFC822 Message-ID:
+
+- `Email/query` with `filter: { "header": ["Message-ID", "<msgid>"] }` and `limit: 2`
+- If no match: return `xinUsageError` ("original email not found by Message-ID: ...")
+- If more than one match: return `xinUsageError` ("multiple emails matched Message-ID: ...")
+
+2) Fetch the original email via `Email/get` requesting the minimal properties:
+- `messageId`, `references`, `from`, `to`, `cc`
+
+3) Add reply headers to the outgoing draft during `Email/set(create)`:
+- `In-Reply-To: <original-message-id>`
+- `References: <existing-refs> <original-message-id>`
+
+If the original email is missing Message-ID, return `xinUsageError`.
+
+Recipient inference:
+- reply: if the user does not provide explicit `--to`, add original `From` to `To`
+- reply-all: add original `From` to `To` and original `To` + `Cc` to `Cc`
+- Exclude the sending identity's email from auto-added recipients.
+
+`--reply-to <addr>` sets the outgoing `Reply-To` header (applies to both normal send and reply).
+
+This is RFC-first: xin only uses standard RFC822 headers and standard JMAP methods.
+
 ### 3.1 Build deterministic MIME structure (v0)
 
 xin v0 uses a deterministic `bodyStructure` + `bodyValues` layout for both `send` and draft creation/updating.

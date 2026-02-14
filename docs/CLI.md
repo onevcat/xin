@@ -526,7 +526,7 @@ Per the RFC-first principle, xin will send standard requests and surface any ser
 
 **JMAP:** `Identity/get`
 
-### 4.1 `xin send --to ... --subject ... [--text <str|@file>] [--body-html <str|@file>] [--cc ...] [--bcc ...] [--attach <path>]... [--identity <id|email>]` (v0)
+### 4.1 `xin send --to ... --subject ... [--text <str|@file>] [--body-html <str|@file>] [--cc ...] [--bcc ...] [--attach <path>]... [--identity <id|email>] [--reply-to-message-id <msgid>] [--reply-all] [--reply-to <addr>]` (v0)
 **gog analog:** `gog gmail send ...`
 **JSON schema:** SCHEMA.md §7.2
 
@@ -534,6 +534,22 @@ Body input:
 - `--text` accepts a literal string or `@/path/to/file.txt` to read from file.
 - `--body-html` accepts a literal string or `@/path/to/file.html`.
 - At least one of `--text`, `--body-html`, `--attach` must be provided.
+
+Reply support (v0):
+- `--reply-to-message-id <msgid>`: reply to a message identified by RFC822 `Message-ID`.
+  - xin resolves the original email via JMAP `Email/query` + `header: ["Message-ID", "<msgid>"]`.
+  - Adds headers:
+    - `In-Reply-To: <original-message-id>`
+    - `References: <existing-refs> <original-message-id>`
+- `--reply-all`: include original recipients:
+  - original `From` is added to `To` (unless already present)
+  - original `To` + `Cc` are added to `Cc`
+  - the sending identity's email is excluded from the auto-added recipients
+  - requires `--reply-to-message-id`
+- `--reply-to <addr>`: sets the `Reply-To` header for the outgoing message (works for both normal send and replies).
+
+Constraints:
+- `--to` is optional when `--reply-to-message-id` is provided; otherwise `--to` is required.
 
 Behavior (v0):
 - Resolves the Drafts mailbox id (role=`drafts`).
