@@ -1,6 +1,6 @@
 # get
 
-> 
+> Get a single email
 
 ## Usage
 

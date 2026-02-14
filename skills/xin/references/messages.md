@@ -1,6 +1,6 @@
 # messages
 
-> 
+> Per-email search commands
 
 ## Usage
 
@@ -28,6 +28,8 @@ Options:
 
 ### search
 
+> Usage: xin messages search [OPTIONS] [QUERY]
+
 ```
 Usage: xin messages search [OPTIONS] [QUERY]
 
@@ -51,14 +53,4 @@ Examples:
   xin messages search "from:alice" --max 20
   xin messages search --filter-json @filter.json --max 50
   xin --plain messages search "subject:meeting" --max 5
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin messages [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

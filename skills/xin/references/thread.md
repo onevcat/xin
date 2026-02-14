@@ -1,6 +1,6 @@
 # thread
 
-> 
+> Thread operations
 
 ## Usage
 
@@ -35,6 +35,8 @@ Options:
 
 ### get
 
+> Usage: xin thread get [OPTIONS] <THREAD_ID>
+
 ```
 Usage: xin thread get [OPTIONS] <THREAD_ID>
 
@@ -59,6 +61,8 @@ Examples:
 
 ### attachments
 
+> Usage: xin thread attachments [OPTIONS] <THREAD_ID>
+
 ```
 Usage: xin thread attachments [OPTIONS] <THREAD_ID>
 
@@ -81,6 +85,8 @@ Examples:
 ```
 
 ### modify
+
+> Usage: xin thread modify [OPTIONS] <THREAD_ID>
 
 ```
 Usage: xin thread modify [OPTIONS] <THREAD_ID>
@@ -121,6 +127,8 @@ Options:
 
 ### archive
 
+> Usage: xin thread archive [OPTIONS] <THREAD_ID>
+
 ```
 Usage: xin thread archive [OPTIONS] <THREAD_ID>
 
@@ -139,6 +147,8 @@ Options:
 ```
 
 ### read
+
+> Usage: xin thread read [OPTIONS] <THREAD_ID>
 
 ```
 Usage: xin thread read [OPTIONS] <THREAD_ID>
@@ -159,6 +169,8 @@ Options:
 
 ### unread
 
+> Usage: xin thread unread [OPTIONS] <THREAD_ID>
+
 ```
 Usage: xin thread unread [OPTIONS] <THREAD_ID>
 
@@ -177,6 +189,8 @@ Options:
 ```
 
 ### trash
+
+> Usage: xin thread trash [OPTIONS] <THREAD_ID>
 
 ```
 Usage: xin thread trash [OPTIONS] <THREAD_ID>
@@ -197,6 +211,8 @@ Options:
 
 ### delete
 
+> Usage: xin thread delete [OPTIONS] <THREAD_ID>
+
 ```
 Usage: xin thread delete [OPTIONS] <THREAD_ID>
 
@@ -212,14 +228,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin thread [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

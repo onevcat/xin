@@ -1,6 +1,6 @@
 # identities
 
-> 
+> Identities operations
 
 ## Usage
 
@@ -29,6 +29,8 @@ Options:
 
 ### list
 
+> Usage: xin identities list [OPTIONS]
+
 ```
 Usage: xin identities list [OPTIONS]
 
@@ -45,6 +47,8 @@ Options:
 
 ### get
 
+> Usage: xin identities get [OPTIONS] <ID>
+
 ```
 Usage: xin identities get [OPTIONS] <ID>
 
@@ -60,14 +64,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin identities [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

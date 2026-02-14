@@ -1,6 +1,6 @@
 # unread
 
-> 
+> Mark emails as unread
 
 ## Usage
 

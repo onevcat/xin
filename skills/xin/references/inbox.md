@@ -1,6 +1,6 @@
 # inbox
 
-> 
+> Inbox-zero helpers
 
 ## Usage
 
@@ -29,6 +29,8 @@ Options:
 
 ### next
 
+> Get the next email to process from Inbox
+
 ```
 Get the next email to process from Inbox
 
@@ -54,6 +56,8 @@ Options:
 
 ### do
 
+> Apply an action to an email (and optionally its whole thread)
+
 ```
 Apply an action to an email (and optionally its whole thread)
 
@@ -73,14 +77,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin inbox [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

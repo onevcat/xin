@@ -1,6 +1,6 @@
 # read
 
-> 
+> Mark emails as read
 
 ## Usage
 

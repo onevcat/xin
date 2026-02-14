@@ -1,6 +1,6 @@
 # config
 
-> 
+> Config file operations
 
 ## Usage
 
@@ -31,6 +31,8 @@ Options:
 
 ### init
 
+> Initialize a minimal config file (fastmail default) if missing
+
 ```
 Initialize a minimal config file (fastmail default) if missing
 
@@ -49,6 +51,8 @@ Options:
 
 ### list
 
+> List configured accounts
+
 ```
 List configured accounts
 
@@ -66,6 +70,8 @@ Options:
 ```
 
 ### set-default
+
+> Set the default account
 
 ```
 Set the default account
@@ -87,6 +93,8 @@ Options:
 
 ### show
 
+> Show config (secrets are never printed)
+
 ```
 Show config (secrets are never printed)
 
@@ -102,14 +110,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin config [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

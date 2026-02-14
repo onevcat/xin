@@ -1,6 +1,6 @@
 # search
 
-> 
+> Search (thread-like by default)
 
 ## Usage
 

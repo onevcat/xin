@@ -1,6 +1,6 @@
 # archive
 
-> 
+> Archive emails
 
 ## Usage
 

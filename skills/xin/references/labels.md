@@ -1,6 +1,6 @@
 # labels
 
-> 
+> Labels (mailboxes) operations
 
 ## Usage
 
@@ -33,6 +33,8 @@ Options:
 
 ### list
 
+> Usage: xin labels list [OPTIONS]
+
 ```
 Usage: xin labels list [OPTIONS]
 
@@ -48,6 +50,8 @@ Options:
 ```
 
 ### get
+
+> Usage: xin labels get [OPTIONS] <MAILBOX>
 
 ```
 Usage: xin labels get [OPTIONS] <MAILBOX>
@@ -67,6 +71,8 @@ Options:
 ```
 
 ### create
+
+> Usage: xin labels create [OPTIONS] <NAME>
 
 ```
 Usage: xin labels create [OPTIONS] <NAME>
@@ -90,6 +96,8 @@ Options:
 
 ### rename
 
+> Usage: xin labels rename [OPTIONS] --name <NAME> <MAILBOX_ID>
+
 ```
 Usage: xin labels rename [OPTIONS] --name <NAME> <MAILBOX_ID>
 
@@ -109,6 +117,8 @@ Options:
 ```
 
 ### delete
+
+> Usage: xin labels delete [OPTIONS] <MAILBOX_ID>
 
 ```
 Usage: xin labels delete [OPTIONS] <MAILBOX_ID>
@@ -130,6 +140,8 @@ Options:
 
 ### modify
 
+> Usage: xin labels modify [OPTIONS] <MAILBOX_ID>
+
 ```
 Usage: xin labels modify [OPTIONS] <MAILBOX_ID>
 
@@ -149,14 +161,4 @@ Options:
       --account <ACCOUNT>        Choose a configured account (when multiple)
       --verbose                  Verbose logging
   -h, --help                     Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin labels [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

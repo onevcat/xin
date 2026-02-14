@@ -1,6 +1,6 @@
 # url
 
-> 
+> Print webmail URL(s) (Fastmail-only)
 
 ## Usage
 

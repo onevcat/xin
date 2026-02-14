@@ -1,6 +1,6 @@
 # watch
 
-> 
+> Watch for email changes (polling Email/changes; NDJSON stream)
 
 ## Usage
 

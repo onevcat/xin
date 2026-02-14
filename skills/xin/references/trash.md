@@ -1,6 +1,6 @@
 # trash
 
-> 
+> Move emails to trash
 
 ## Usage
 

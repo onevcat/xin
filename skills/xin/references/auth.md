@@ -1,6 +1,6 @@
 # auth
 
-> 
+> Credential helpers
 
 ## Usage
 
@@ -28,6 +28,8 @@ Options:
 
 ### set-token
 
+> Store a bearer token for an account (writes tokenFile and updates config)
+
 ```
 Store a bearer token for an account (writes tokenFile and updates config)
 
@@ -45,14 +47,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin auth [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

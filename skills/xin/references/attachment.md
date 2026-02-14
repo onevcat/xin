@@ -1,6 +1,6 @@
 # attachment
 
-> 
+> Download an attachment
 
 ## Usage
 

@@ -1,6 +1,6 @@
 # send
 
-> 
+> Send an email
 
 ## Usage
 

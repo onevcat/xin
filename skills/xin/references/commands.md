@@ -7,27 +7,27 @@ as the stable contract, with `--plain` for human-friendly output.
 
 ## Commands
 
-- [search](./search.md) - 
-- [messages](./messages.md) - 
-- [get](./get.md) - 
-- [thread](./thread.md) - 
-- [attachment](./attachment.md) - 
-- [url](./url.md) - 
-- [archive](./archive.md) - 
-- [read](./read.md) - 
-- [unread](./unread.md) - 
-- [trash](./trash.md) - 
-- [batch](./batch.md) - 
-- [inbox](./inbox.md) - 
-- [labels](./labels.md) - 
-- [mailboxes](./mailboxes.md) - 
-- [identities](./identities.md) - 
-- [send](./send.md) - 
-- [drafts](./drafts.md) - 
-- [history](./history.md) - 
-- [watch](./watch.md) - 
-- [config](./config.md) - 
-- [auth](./auth.md) - 
+- [search](./search.md) - Search (thread-like by default)
+- [messages](./messages.md) - Per-email search commands
+- [get](./get.md) - Get a single email
+- [thread](./thread.md) - Thread operations
+- [attachment](./attachment.md) - Download an attachment
+- [url](./url.md) - Print webmail URL(s) (Fastmail-only)
+- [archive](./archive.md) - Archive emails
+- [read](./read.md) - Mark emails as read
+- [unread](./unread.md) - Mark emails as unread
+- [trash](./trash.md) - Move emails to trash
+- [batch](./batch.md) - Batch operations
+- [inbox](./inbox.md) - Inbox-zero helpers
+- [labels](./labels.md) - Labels (mailboxes) operations
+- [mailboxes](./mailboxes.md) - Mailboxes operations (alias of labels)
+- [identities](./identities.md) - Identities operations
+- [send](./send.md) - Send an email
+- [drafts](./drafts.md) - Drafts operations
+- [history](./history.md) - History / changes
+- [watch](./watch.md) - Watch for email changes (polling Email/changes; NDJSON stream)
+- [config](./config.md) - Config file operations
+- [auth](./auth.md) - Credential helpers
 
 ## Quick Reference
 

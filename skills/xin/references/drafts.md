@@ -1,6 +1,6 @@
 # drafts
 
-> 
+> Drafts operations
 
 ## Usage
 
@@ -35,6 +35,8 @@ Options:
 
 ### list
 
+> Usage: xin drafts list [OPTIONS]
+
 ```
 Usage: xin drafts list [OPTIONS]
 
@@ -52,6 +54,8 @@ Options:
 ```
 
 ### get
+
+> Usage: xin drafts get [OPTIONS] <DRAFT_EMAIL_ID>
 
 ```
 Usage: xin drafts get [OPTIONS] <DRAFT_EMAIL_ID>
@@ -72,6 +76,8 @@ Options:
 ```
 
 ### create
+
+> Usage: xin drafts create [OPTIONS]
 
 ```
 Usage: xin drafts create [OPTIONS]
@@ -97,6 +103,8 @@ Options:
 ```
 
 ### update
+
+> Metadata-only update that MUST NOT change the draft id.
 
 ```
 Metadata-only update that MUST NOT change the draft id.
@@ -155,6 +163,8 @@ Options:
 
 ### rewrite
 
+> Rewrite a draft's message content by creating a new draft and replacing the old one
+
 ```
 Rewrite a draft's message content by creating a new draft and replacing the old one
 
@@ -188,6 +198,8 @@ Options:
 
 ### delete
 
+> Remove draft(s) from the Drafts mailbox (non-destructive)
+
 ```
 Remove draft(s) from the Drafts mailbox (non-destructive)
 
@@ -208,6 +220,8 @@ Options:
 ```
 
 ### destroy
+
+> Permanently destroy draft email(s). Requires global --force
 
 ```
 Permanently destroy draft email(s). Requires global --force
@@ -230,6 +244,8 @@ Options:
 
 ### send
 
+> Usage: xin drafts send [OPTIONS] <DRAFT_EMAIL_ID>
+
 ```
 Usage: xin drafts send [OPTIONS] <DRAFT_EMAIL_ID>
 
@@ -246,14 +262,4 @@ Options:
       --account <ACCOUNT>    Choose a configured account (when multiple)
       --verbose              Verbose logging
   -h, --help                 Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin drafts [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```

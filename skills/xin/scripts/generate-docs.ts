@@ -16,11 +16,17 @@ const REFERENCES_DIR = path.join(SKILL_DIR, "references")
 const SKILL_MD = path.join(SKILL_DIR, "SKILL.md")
 const SKILL_TEMPLATE = path.join(SKILL_DIR, "SKILL.template.md")
 
-// Files to preserve (not generated from help)
-const PRESERVED_FILES: string[] = []
+// Files to preserve (not generated from CLI help)
+// Keep these stable, hand-edited references around when regenerating.
+const PRESERVED_FILES: string[] = [
+  "common-tasks.md",
+  "SCHEMA.md",
+  "SCHEMA.from-source.md",
+  "SCHEMA.compare.md",
+]
 
-// Commands to skip (shell completions, not useful for docs)
-const SKIP_COMMANDS: string[] = ["help"]
+// Commands to skip (not useful for docs, or pseudo-commands like clap's `help`)
+const SKIP_COMMANDS_ANYWHERE: Set<string> = new Set(["help"])
 
 interface CommandInfo {
   name: string
@@ -90,16 +96,29 @@ async function getCommandHelp(cmdPath: string[], xinBin: string): Promise<string
   return stripAnsi(result.stdout)
 }
 
-async function discoverCommand(cmdPath: string[], xinBin: string): Promise<CommandInfo> {
+function extractDescriptionFromHelp(help: string): string {
+  // Some CLIs (like linear) have a "Description:" section, but clap-based help
+  // (like xin) typically starts with a one-line summary.
+  const descMatch = help.match(/Description:\s*\n\s*(.+)/)
+  if (descMatch) return descMatch[1].trim()
+
+  const firstNonEmpty = help.split("\n").find((l) => l.trim().length > 0)
+  return (firstNonEmpty ?? "").trim()
+}
+
+async function discoverCommand(
+  cmdPath: string[],
+  xinBin: string,
+): Promise<CommandInfo> {
   const help = await getCommandHelp(cmdPath, xinBin)
   const name = cmdPath.join(" ")
 
-  // Extract description from help text
-  const descMatch = help.match(/Description:\s*\n\s*(.+)/)
-  const description = descMatch ? descMatch[1].trim() : ""
+  const description = extractDescriptionFromHelp(help)
 
   // Find subcommands
-  const subcommandNames = parseCommands(help)
+  const subcommandNames = parseCommands(help).filter(
+    (c) => !SKIP_COMMANDS_ANYWHERE.has(c),
+  )
   const subcommands: CommandInfo[] = []
 
   for (const subcmd of subcommandNames) {
@@ -200,7 +219,7 @@ async function main() {
   console.log("Discovering commands...")
   const topLevelHelp = await getCommandHelp([], xinBin)
   const topLevelCommands = parseCommands(topLevelHelp).filter(
-    (cmd) => !SKIP_COMMANDS.includes(cmd),
+    (cmd) => !SKIP_COMMANDS_ANYWHERE.has(cmd),
   )
   console.log(`Found ${topLevelCommands.length} top-level commands`)
 

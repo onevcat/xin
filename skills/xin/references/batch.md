@@ -1,6 +1,6 @@
 # batch
 
-> 
+> Batch operations
 
 ## Usage
 
@@ -28,6 +28,8 @@ Options:
 ## Subcommands
 
 ### modify
+
+> Usage: xin batch modify [OPTIONS] [EMAIL_IDS]...
 
 ```
 Usage: xin batch modify [OPTIONS] [EMAIL_IDS]...
@@ -68,6 +70,8 @@ Options:
 
 ### delete
 
+> Usage: xin batch delete [OPTIONS] [EMAIL_IDS]...
+
 ```
 Usage: xin batch delete [OPTIONS] [EMAIL_IDS]...
 
@@ -83,14 +87,4 @@ Options:
       --account <ACCOUNT>  Choose a configured account (when multiple)
       --verbose            Verbose logging
   -h, --help               Print help
-```
-
-### help
-
-```
-error: unrecognized subcommand '--help'
-
-Usage: xin batch [OPTIONS] <COMMAND>
-
-For more information, try '--help'.
 ```
