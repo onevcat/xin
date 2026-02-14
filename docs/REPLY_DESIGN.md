@@ -31,8 +31,8 @@ xin reply <emailId> [--reply-all] [--to ...] [--cc ...] [--bcc ...]
    - `In-Reply-To: <original-message-id>`
    - `References: <existing-refs> <original-message-id>`
 3) **推导收件人**:
-   - reply：默认 `From -> To`
-   - reply-all：`From -> To` + `To/Cc -> Cc`（排除 self）
+   - reply：默认 `Reply-To -> To`（若无 Reply-To 则 `From -> To`）
+   - reply-all：`Reply-To/From -> To` + `To/Cc -> Cc`（排除 self）
 4) **创建 draft 并提交**：复用 `Email/set` + `EmailSubmission/set`
 
 ## 预期使用方式

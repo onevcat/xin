@@ -557,12 +557,12 @@ Behavior (v0):
 
 Behavior (v0):
 - `<emailId>` is the JMAP Email id (from `xin search`, `xin messages search`, or `xin inbox next`).
-- xin fetches the original email via `Email/get` to read `messageId`, `references`, `from`, `to`, `cc`, and `subject`.
+- xin fetches the original email via `Email/get` to read `messageId`, `references`, `from`, `replyTo`, `to`, `cc`, and `subject`.
 - Adds reply threading headers to the outgoing draft:
   - `In-Reply-To: <original-message-id>`
   - `References: <existing-refs> <original-message-id>`
 - Recipient inference:
-  - If `--to` is not provided, reply to original `From`.
+  - If `--to` is not provided, reply to original `Reply-To` (preferred) or `From`.
   - If `--reply-all` is set, include original `To` + `Cc` into `Cc` (excluding the sending identity).
 - If `--subject` is not provided, xin uses `Re: <original subject>`.
 - Body/attachments follow the same rules as `xin send`.

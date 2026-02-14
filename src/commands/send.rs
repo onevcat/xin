@@ -121,7 +121,8 @@ fn default_reply_subject(original_subject: Option<&str>) -> String {
 /// Infer reply recipients based on original email and reply args.
 ///
 /// Rules:
-/// - If args.to is provided (override), use it as-is. Otherwise reply to original From.
+/// - If args.to is provided (override), use it as-is.
+/// - Otherwise infer `To` from original `Reply-To` (preferred) or `From`.
 /// - If reply_all is set, include original To + Cc in CC (excluding self email).
 fn infer_reply_recipients(
     original: &jmap_client::email::Email,
@@ -166,7 +167,12 @@ fn infer_reply_recipients(
     let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String { a.email().to_string() };
 
     if to.is_empty() {
-        if let Some(from_addrs) = original.from() {
+        // Prefer Reply-To when present (mailing lists / automated senders often set it).
+        if let Some(reply_to_addrs) = original.reply_to() {
+            for addr in reply_to_addrs {
+                push_unique(&mut to, fmt_addr(addr));
+            }
+        } else if let Some(from_addrs) = original.from() {
             for addr in from_addrs {
                 push_unique(&mut to, fmt_addr(addr));
             }
@@ -556,6 +562,7 @@ pub async fn reply(account: Option<String>, args: &ReplyArgs) -> Envelope<Value>
                 jmap_client::email::Property::MessageId,
                 jmap_client::email::Property::References,
                 jmap_client::email::Property::From,
+                jmap_client::email::Property::ReplyTo,
                 jmap_client::email::Property::To,
                 jmap_client::email::Property::Cc,
                 jmap_client::email::Property::Subject,
