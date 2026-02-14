@@ -21,7 +21,6 @@ const SKILL_TEMPLATE = path.join(SCRIPT_DIR, "templates", "SKILL.template.md")
 // Keep these stable, hand-edited references around when regenerating.
 const PRESERVED_FILES: string[] = [
   "common-tasks.md",
-  "SCHEMA.md",
   // commands.md is manually curated (merged with high-level overview)
   "commands.md",
   // _schemas/ - JSON schemas for agents (not generated, hand-crafted)
