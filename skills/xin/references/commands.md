@@ -1,6 +1,6 @@
 # xin CLI Command Reference
 
-> Generated from xin CLI v0.1.0
+> Generated from xin CLI v0.1.1
 
 xin is an agent-first JMAP CLI for Fastmail. It provides JSON-first output
 as the stable contract, with `--plain` for human-friendly output.
