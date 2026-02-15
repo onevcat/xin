@@ -622,136 +622,23 @@ impl Backend {
     pub async fn list_identities(
         &self,
     ) -> Result<Vec<jmap_client::identity::Identity>, XinErrorOut> {
-        // Identity/get is part of JMAP Submission (RFC 8621). Some servers require explicitly
-        // including the submission capability in the request's `using` list, otherwise they
-        // respond with "Unknown method".
-        let client = self.j.client();
-        let session = client.session();
-        let api_url = session.api_url().to_string();
-        let account_id = client.default_account_id().to_string();
-
-        let request_body = json!({
-            "using": [
-                "urn:ietf:params:jmap:core",
-                "urn:ietf:params:jmap:submission"
-            ],
-            "methodCalls": [[
-                "Identity/get",
-                {
-                    "accountId": account_id,
-                    "ids": null,
-                    "properties": ["id", "name", "email"]
-                },
-                "i0"
-            ]]
-        });
-
-        let http = reqwest::Client::builder()
-            .timeout(client.timeout())
-            .default_headers(client.headers().clone())
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|e| XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("failed to build http client: {e}"),
-                http: None,
-                jmap: None,
-            })?;
-
-        let resp = http
-            .post(api_url)
-            .json(&request_body)
-            .send()
+        let mut request = self.j.client().build();
+        let get_request = request.get_identity();
+        get_request.properties([
+            jmap_client::identity::Property::Id,
+            jmap_client::identity::Property::Name,
+            jmap_client::identity::Property::Email,
+        ]);
+        request
+            .send_single::<jmap_client::core::response::IdentityGetResponse>()
             .await
+            .map(|mut r| r.take_list())
             .map_err(|e| XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("request failed: {e}"),
-                http: None,
-                jmap: None,
-            })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("server returned {status}: {text}"),
-                http: Some(json!({"status": status.as_u16()})),
-                jmap: None,
-            });
-        }
-
-        let v: Value = resp.json().await.map_err(|e| XinErrorOut {
-            kind: "httpError".to_string(),
-            message: format!("invalid json response: {e}"),
-            http: None,
-            jmap: None,
-        })?;
-
-        let mrs = v
-            .get("methodResponses")
-            .and_then(|x| x.as_array())
-            .ok_or_else(|| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
-                message: "missing methodResponses".to_string(),
+                message: format!("Identity/get failed: {e}"),
                 http: None,
                 jmap: None,
-            })?;
-
-        let mut out: Option<jmap_client::core::response::IdentityGetResponse> = None;
-        let mut jmap_error: Option<Value> = None;
-
-        for mr in mrs {
-            let arr = mr.as_array().ok_or_else(|| XinErrorOut {
-                kind: "jmapRequestError".to_string(),
-                message: "invalid methodResponses entry".to_string(),
-                http: None,
-                jmap: None,
-            })?;
-            if arr.len() < 2 {
-                continue;
-            }
-            let name = arr[0].as_str().unwrap_or("");
-            if name == "error" {
-                jmap_error = Some(arr[1].clone());
-                continue;
-            }
-            let call_id = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
-            if name == "Identity/get" && call_id == "i0" {
-                out = serde_json::from_value(arr[1].clone()).ok();
-            }
-        }
-
-        if let Some(err) = jmap_error {
-            let ty = err
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-            let desc = err
-                .get("description")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let msg = if desc.is_empty() {
-                format!("JMAP error: {ty}")
-            } else {
-                format!("JMAP error: {ty}: {desc}")
-            };
-            return Err(XinErrorOut {
-                kind: "jmapRequestError".to_string(),
-                message: msg,
-                http: None,
-                jmap: Some(err),
-            });
-        }
-
-        let mut out = out.ok_or_else(|| XinErrorOut {
-            kind: "jmapRequestError".to_string(),
-            message: "missing Identity/get response".to_string(),
-            http: None,
-            jmap: None,
-        })?;
-
-        Ok(out.take_list())
+            })
     }
 
     pub async fn upload_blob(
@@ -1224,145 +1111,16 @@ impl Backend {
         email_id: &str,
         identity_id: &str,
     ) -> Result<jmap_client::email_submission::EmailSubmission, XinErrorOut> {
-        // EmailSubmission/set is part of JMAP Submission; ensure the submission capability is
-        // included in `using` to avoid "Unknown method" responses.
-        let client = self.j.client();
-        let session = client.session();
-        let api_url = session.api_url().to_string();
-        let account_id = client.default_account_id().to_string();
-
-        let request_body = json!({
-            "using": [
-                "urn:ietf:params:jmap:core",
-                "urn:ietf:params:jmap:mail",
-                "urn:ietf:params:jmap:submission"
-            ],
-            "methodCalls": [[
-                "EmailSubmission/set",
-                {
-                    "accountId": account_id,
-                    "create": {
-                        "c0": {
-                            "emailId": email_id,
-                            "identityId": identity_id
-                        }
-                    }
-                },
-                "s0"
-            ]]
-        });
-
-        let http = reqwest::Client::builder()
-            .timeout(client.timeout())
-            .default_headers(client.headers().clone())
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|e| XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("failed to build http client: {e}"),
-                http: None,
-                jmap: None,
-            })?;
-
-        let resp = http
-            .post(api_url)
-            .json(&request_body)
-            .send()
+        self.j
+            .client()
+            .email_submission_create(email_id.to_string(), identity_id.to_string())
             .await
             .map_err(|e| XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("request failed: {e}"),
-                http: None,
-                jmap: None,
-            })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(XinErrorOut {
-                kind: "httpError".to_string(),
-                message: format!("server returned {status}: {text}"),
-                http: Some(json!({"status": status.as_u16()})),
-                jmap: None,
-            });
-        }
-
-        let v: Value = resp.json().await.map_err(|e| XinErrorOut {
-            kind: "httpError".to_string(),
-            message: format!("invalid json response: {e}"),
-            http: None,
-            jmap: None,
-        })?;
-
-        let mrs = v
-            .get("methodResponses")
-            .and_then(|x| x.as_array())
-            .ok_or_else(|| XinErrorOut {
                 kind: "jmapRequestError".to_string(),
-                message: "missing methodResponses".to_string(),
+                message: format!("EmailSubmission/set failed: {e}"),
                 http: None,
                 jmap: None,
-            })?;
-
-        let mut out: Option<jmap_client::core::response::EmailSubmissionSetResponse> = None;
-        let mut jmap_error: Option<Value> = None;
-
-        for mr in mrs {
-            let arr = mr.as_array().ok_or_else(|| XinErrorOut {
-                kind: "jmapRequestError".to_string(),
-                message: "invalid methodResponses entry".to_string(),
-                http: None,
-                jmap: None,
-            })?;
-            if arr.len() < 2 {
-                continue;
-            }
-            let name = arr[0].as_str().unwrap_or("");
-            if name == "error" {
-                jmap_error = Some(arr[1].clone());
-                continue;
-            }
-            let call_id = arr.get(2).and_then(|v| v.as_str()).unwrap_or("");
-            if name == "EmailSubmission/set" && call_id == "s0" {
-                out = serde_json::from_value(arr[1].clone()).ok();
-            }
-        }
-
-        if let Some(err) = jmap_error {
-            let ty = err
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown");
-            let desc = err
-                .get("description")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let msg = if desc.is_empty() {
-                format!("JMAP error: {ty}")
-            } else {
-                format!("JMAP error: {ty}: {desc}")
-            };
-            return Err(XinErrorOut {
-                kind: "jmapRequestError".to_string(),
-                message: msg,
-                http: None,
-                jmap: Some(err),
-            });
-        }
-
-        let mut out = out.ok_or_else(|| XinErrorOut {
-            kind: "jmapRequestError".to_string(),
-            message: "missing EmailSubmission/set response".to_string(),
-            http: None,
-            jmap: None,
-        })?;
-
-        out.created("c0").map_err(|e| XinErrorOut {
-            kind: "jmapRequestError".to_string(),
-            message: format!("EmailSubmission/set failed: {e}"),
-            http: None,
-            jmap: None,
-        })
+            })
     }
 }
 

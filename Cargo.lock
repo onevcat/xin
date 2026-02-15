@@ -787,7 +787,7 @@ checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 [[package]]
 name = "jmap-client"
 version = "0.4.0"
-source = "git+https://github.com/onevcat/jmap-client?rev=019ef8e#019ef8e2ecd17dafce96ba06bcaed093d9016c3a"
+source = "git+https://github.com/onevcat/jmap-client?rev=61a2304#61a2304f13514f32a0b0a292a7a2121bbdc1ab0e"
 dependencies = [
  "ahash",
  "async-stream",
