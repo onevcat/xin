@@ -5,6 +5,23 @@ Agent-first **JMAP** CLI (Fastmail-first).
 > **Design goal:** `xin` is to JMAP email what `gog gmail` is to Gmail.
 > It is **not** a multi-provider wrapper and **not** a replacement for `gog`.
 
+## Install (recommended)
+
+Homebrew (macOS / Linux):
+
+```bash
+brew install onevcat/tap/xin
+```
+
+Minimal demo (Fastmail):
+
+```bash
+xin config init
+xin auth set-token fmu1-xxxxx   # Fastmail API token
+xin search --max 1
+# or: xin inbox next
+```
+
 ## Quick start (Fastmail)
 
 1) Initialize config:
@@ -16,7 +33,8 @@ xin config init
 2) Set your Fastmail API token (Bearer token):
 
 ```bash
-xin auth set-token <TOKEN>
+# example token format: fmu1-xxxxx
+xin auth set-token fmu1-xxxxx
 ```
 
 3) Search and read:
