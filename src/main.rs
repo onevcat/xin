@@ -23,8 +23,7 @@ async fn main() {
     let env = commands::dispatch(&cli).await;
 
     // watch is primarily a streaming command; suppress the final envelope for stream-only consumers.
-    let suppress_envelope =
-        matches!(cli.command, crate::cli::Command::Watch(ref args) if args.no_envelope || cli.plain);
+    let suppress_envelope = matches!(cli.command, crate::cli::Command::Watch(ref args) if args.no_envelope || cli.plain);
 
     if !suppress_envelope {
         if cli.plain {

@@ -1,6 +1,6 @@
 use jmap_client::core::query::QueryResponse;
 use jmap_client::core::set::SetObject;
-use jmap_client::email::Email;
+use jmap_client::email::{Email, Header};
 use jmap_client::identity;
 use jmap_client::mailbox;
 use jmap_client::thread;
@@ -680,6 +680,37 @@ impl Backend {
         html: Option<&str>,
         attachments: &[UploadedBlob],
     ) -> Result<Email, XinErrorOut> {
+        self.create_draft_email_with_headers(
+            mailbox_id,
+            from_name,
+            from_email,
+            to,
+            cc,
+            bcc,
+            subject,
+            text,
+            html,
+            attachments,
+            None, // no extra headers
+        )
+        .await
+    }
+
+    /// Create a draft email with optional extra headers (for reply/forward).
+    pub async fn create_draft_email_with_headers(
+        &self,
+        mailbox_id: &str,
+        from_name: Option<String>,
+        from_email: String,
+        to: &[String],
+        cc: &[String],
+        bcc: &[String],
+        subject: Option<&str>,
+        text: Option<&str>,
+        html: Option<&str>,
+        attachments: &[UploadedBlob],
+        extra_headers: Option<&[(String, String)]>,
+    ) -> Result<Email, XinErrorOut> {
         let mut request = self.j.client().build();
         let create = request.set_email().create();
         create.mailbox_ids([mailbox_id.to_string()]);
@@ -704,6 +735,15 @@ impl Backend {
             create.subject(s.to_string());
         }
 
+        // Add extra headers (e.g., In-Reply-To, References, Reply-To)
+        if let Some(headers) = extra_headers {
+            use jmap_client::email::HeaderValue;
+            for (name, value) in headers {
+                let header = Header::as_raw(name.clone(), false);
+                create.header(header, HeaderValue::AsText(value.clone()));
+            }
+        }
+
         let (root, body_values) = build_email_body(text, html, attachments);
 
         create.body_structure(root.into());
@@ -726,7 +766,6 @@ impl Backend {
                 jmap: None,
             })
     }
-
 
     pub async fn modify_emails(
         &self,

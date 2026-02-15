@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::backend::{Backend, ModifyPlan, UploadedBlob};
 use crate::cli::{
     DraftsCreateArgs, DraftsDeleteArgs, DraftsDestroyArgs, DraftsGetArgs, DraftsListArgs,
-    DraftsRewriteArgs, DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, SendArgs,
+    DraftsRewriteArgs, DraftsSendArgs, DraftsUpdateArgs, IdentitiesGetArgs, ReplyArgs, SendArgs,
 };
 use crate::error::XinErrorOut;
 use crate::output::{Envelope, Meta};
@@ -82,6 +82,128 @@ fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> O
     }
 
     None
+}
+
+/// Build reply headers (In-Reply-To + References) from the original email.
+fn build_reply_headers(
+    original: &jmap_client::email::Email,
+) -> Result<Vec<(String, String)>, XinErrorOut> {
+    let orig_msg_id = original
+        .message_id()
+        .and_then(|ids| ids.first())
+        .cloned()
+        .ok_or_else(|| XinErrorOut::usage("original email missing Message-ID".to_string()))?;
+
+    let mut headers: Vec<(String, String)> = Vec::new();
+    headers.push(("In-Reply-To".to_string(), orig_msg_id.clone()));
+
+    let mut refs: Vec<String> = Vec::new();
+    if let Some(existing_refs) = original.references() {
+        refs.extend(existing_refs.iter().cloned());
+    }
+    refs.push(orig_msg_id);
+    headers.push(("References".to_string(), refs.join(" ")));
+    Ok(headers)
+}
+
+fn default_reply_subject(original_subject: Option<&str>) -> String {
+    let s = original_subject.unwrap_or("");
+    let trimmed = s.trim();
+    if trimmed.to_lowercase().starts_with("re:") {
+        trimmed.to_string()
+    } else if trimmed.is_empty() {
+        "Re:".to_string()
+    } else {
+        format!("Re: {trimmed}")
+    }
+}
+
+/// Infer reply recipients based on original email and reply args.
+///
+/// Rules:
+/// - If args.to is provided (override), use it as-is.
+/// - Otherwise infer `To` from original `Reply-To` (preferred) or `From`.
+/// - If reply_all is set, include original To + Cc in CC (excluding self email).
+fn infer_reply_recipients(
+    original: &jmap_client::email::Email,
+    reply_all: bool,
+    override_to: &[String],
+    override_cc: &[String],
+    self_email: &str,
+) -> (Vec<String>, Vec<String>) {
+    use std::collections::HashSet;
+
+    fn extract_email(s: &str) -> String {
+        if let (Some(l), Some(r)) = (s.rfind('<'), s.rfind('>')) {
+            if l < r {
+                return s[l + 1..r].trim().to_string();
+            }
+        }
+        s.trim().to_string()
+    }
+
+    fn key(s: &str) -> String {
+        extract_email(s).to_lowercase()
+    }
+
+    let self_key = self_email.to_lowercase();
+
+    let mut to: Vec<String> = override_to.to_vec();
+    let mut cc: Vec<String> = override_cc.to_vec();
+
+    let mut seen: HashSet<String> = HashSet::new();
+    for r in to.iter().chain(cc.iter()) {
+        seen.insert(key(r));
+    }
+
+    let mut push_unique = |list: &mut Vec<String>, raw: String| {
+        let k = key(&raw);
+        if !seen.contains(&k) {
+            seen.insert(k);
+            list.push(raw);
+        }
+    };
+
+    let fmt_addr = |a: &jmap_client::email::EmailAddress| -> String { a.email().to_string() };
+
+    if to.is_empty() {
+        // Prefer Reply-To when present (mailing lists / automated senders often set it).
+        if let Some(reply_to_addrs) = original.reply_to() {
+            for addr in reply_to_addrs {
+                push_unique(&mut to, fmt_addr(addr));
+            }
+        } else if let Some(from_addrs) = original.from() {
+            for addr in from_addrs {
+                push_unique(&mut to, fmt_addr(addr));
+            }
+        }
+    }
+
+    if reply_all {
+        let mut push_cc = |raw: String| {
+            let k = key(&raw);
+            if k == self_key {
+                return;
+            }
+            if !seen.contains(&k) {
+                seen.insert(k);
+                cc.push(raw);
+            }
+        };
+
+        if let Some(to_addrs) = original.to() {
+            for addr in to_addrs {
+                push_cc(fmt_addr(addr));
+            }
+        }
+        if let Some(cc_addrs) = original.cc() {
+            for addr in cc_addrs {
+                push_cc(fmt_addr(addr));
+            }
+        }
+    }
+
+    (to, cc)
 }
 
 fn find_drafts_mailbox_id(
@@ -284,6 +406,31 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         Err(e) => return Envelope::err("send", account, e),
     };
 
+    // Resolve Drafts mailbox.
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    let identities = match backend.list_identities().await {
+        Ok(i) => i,
+        Err(e) => return Envelope::err("send", account, e),
+    };
+
+    let (identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err("send", account, e),
+        };
+
+    let to = args.to.clone();
+    let cc = args.cc.clone();
+
     let text = match &args.text {
         Some(v) => Some(match read_text_arg(v) {
             Ok(t) => t,
@@ -310,27 +457,6 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
         );
     }
 
-    let mailboxes = match backend.list_mailboxes().await {
-        Ok(m) => m,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
-        Ok(id) => id,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let identities = match backend.list_identities().await {
-        Ok(i) => i,
-        Err(e) => return Envelope::err("send", account, e),
-    };
-
-    let (identity_id, from_name, from_email) =
-        match resolve_identity(&identities, args.identity.as_deref()) {
-            Ok(v) => v,
-            Err(e) => return Envelope::err("send", account, e),
-        };
-
     let uploaded = match upload_attachments(&backend, &args.attach).await {
         Ok(v) => v,
         Err(e) => return Envelope::err("send", account, e),
@@ -341,8 +467,8 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
             &drafts_id,
             from_name,
             from_email,
-            &args.to,
-            &args.cc,
+            &to,
+            &cc,
             &args.bcc,
             Some(&args.subject),
             text.as_deref(),
@@ -395,6 +521,182 @@ pub async fn send(account: Option<String>, args: &SendArgs) -> Envelope<Value> {
     });
 
     Envelope::ok("send", account, data, Meta::default())
+}
+
+pub async fn reply(account: Option<String>, args: &ReplyArgs) -> Envelope<Value> {
+    let backend = match Backend::connect(account.as_deref()).await {
+        Ok(b) => b,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    // Resolve Drafts mailbox.
+    let mailboxes = match backend.list_mailboxes().await {
+        Ok(m) => m,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let drafts_id = match find_drafts_mailbox_id(&mailboxes) {
+        Ok(id) => id,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    // Resolve sending identity (needed for EmailSubmission and for reply-all self exclusion).
+    let identities = match backend.list_identities().await {
+        Ok(i) => i,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let (identity_id, from_name, from_email) =
+        match resolve_identity(&identities, args.identity.as_deref()) {
+            Ok(v) => v,
+            Err(e) => return Envelope::err("reply", account, e),
+        };
+
+    // Fetch original email by emailId.
+    let original = match backend
+        .get_email(
+            &args.email_id,
+            Some(vec![
+                jmap_client::email::Property::Id,
+                jmap_client::email::Property::ThreadId,
+                jmap_client::email::Property::MessageId,
+                jmap_client::email::Property::References,
+                jmap_client::email::Property::From,
+                jmap_client::email::Property::ReplyTo,
+                jmap_client::email::Property::To,
+                jmap_client::email::Property::Cc,
+                jmap_client::email::Property::Subject,
+            ]),
+        )
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let Some(original) = original else {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage(format!("original email not found: {}", args.email_id)),
+        );
+    };
+
+    let headers = match build_reply_headers(&original) {
+        Ok(h) => h,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let (to, cc) =
+        infer_reply_recipients(&original, args.reply_all, &args.to, &args.cc, &from_email);
+
+    if to.is_empty() {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage("could not infer reply recipients (provide --to)".to_string()),
+        );
+    }
+
+    let subject = args
+        .subject
+        .clone()
+        .unwrap_or_else(|| default_reply_subject(original.subject()));
+
+    let text = match &args.text {
+        Some(v) => Some(match read_text_arg(v) {
+            Ok(t) => t,
+            Err(e) => return Envelope::err("reply", account, e),
+        }),
+        None => None,
+    };
+
+    let html = match &args.body_html {
+        Some(v) => Some(match read_text_arg(v) {
+            Ok(t) => t,
+            Err(e) => return Envelope::err("reply", account, e),
+        }),
+        None => None,
+    };
+
+    if text.is_none() && html.is_none() && args.attach.is_empty() {
+        return Envelope::err(
+            "reply",
+            account,
+            XinErrorOut::usage(
+                "missing message content: provide --text, --body-html, or --attach".to_string(),
+            ),
+        );
+    }
+
+    // Merge explicit BCC.
+    let bcc = args.bcc.clone();
+
+    let uploaded = match upload_attachments(&backend, &args.attach).await {
+        Ok(v) => v,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let email = match backend
+        .create_draft_email_with_headers(
+            &drafts_id,
+            from_name,
+            from_email,
+            &to,
+            &cc,
+            &bcc,
+            Some(&subject),
+            text.as_deref(),
+            html.as_deref(),
+            &uploaded,
+            Some(&headers),
+        )
+        .await
+    {
+        Ok(e) => e,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let email_id = match email.id() {
+        Some(id) => id.to_string(),
+        None => {
+            return Envelope::err(
+                "reply",
+                account,
+                XinErrorOut::config("Email/set did not return email id".to_string()),
+            );
+        }
+    };
+
+    let submission = match backend.submit_email(&email_id, &identity_id).await {
+        Ok(s) => s,
+        Err(e) => return Envelope::err("reply", account, e),
+    };
+
+    let uploaded_out = uploaded
+        .iter()
+        .map(|u| {
+            json!({
+                "blobId": u.blob_id,
+                "type": u.content_type,
+                "size": u.size,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let data = json!({
+        "draft": {
+            "emailId": email_id,
+            "threadId": email.thread_id()
+        },
+        "submission": {
+            "id": submission.id(),
+            "sendAt": to_rfc3339(submission.send_at())
+        },
+        "uploaded": uploaded_out
+    });
+
+    Envelope::ok("reply", account, data, Meta::default())
 }
 
 pub async fn drafts_list(account: Option<String>, args: &DraftsListArgs) -> Envelope<Value> {

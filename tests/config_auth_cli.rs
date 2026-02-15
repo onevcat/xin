@@ -95,11 +95,7 @@ fn auth_set_token_writes_token_file_and_updates_config() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let cfg_mode = std::fs::metadata(&cfg_path)
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
+        let cfg_mode = std::fs::metadata(&cfg_path).unwrap().permissions().mode() & 0o777;
         assert_eq!(cfg_mode, 0o600);
 
         let tok_mode = std::fs::metadata(&token_file_path)
@@ -165,7 +161,8 @@ fn config_show_effective_prefers_env_over_config() {
         Some("https://example.invalid")
     );
     assert_eq!(
-        v.pointer("/data/runtime/auth/type").and_then(|v| v.as_str()),
+        v.pointer("/data/runtime/auth/type")
+            .and_then(|v| v.as_str()),
         Some("bearer")
     );
 }

@@ -47,10 +47,7 @@ pub async fn set_token(cli_account: Option<&str>, args: &AuthSetTokenArgs) -> En
         }
     }
 
-    let acct = cfg
-        .accounts
-        .get_mut(&account)
-        .expect("account exists");
+    let acct = cfg.accounts.get_mut(&account).expect("account exists");
 
     // Decide token file path.
     let token_file_path = match &acct.auth {
@@ -67,12 +64,10 @@ pub async fn set_token(cli_account: Option<&str>, args: &AuthSetTokenArgs) -> En
                 }
             }
         }
-        _ => {
-            match default_token_file_for_account(&account) {
-                Ok(p) => p,
-                Err(e) => return Envelope::err(command_name, None, e),
-            }
-        }
+        _ => match default_token_file_for_account(&account) {
+            Ok(p) => p,
+            Err(e) => return Envelope::err(command_name, None, e),
+        },
     };
 
     // Write token file.

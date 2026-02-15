@@ -50,7 +50,6 @@ impl RuntimeConfig {
     pub fn from_env() -> Result<Self, XinErrorOut> {
         resolve_runtime_config(None).map(|r| r.config)
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -90,7 +89,8 @@ fn parse_auth_from_global_env() -> Result<Option<AuthConfig>, XinErrorOut> {
     let basic_pass_file_env = std::env::var("XIN_BASIC_PASS_FILE").ok();
 
     let any_bearer = token_env.is_some() || token_file_env.is_some();
-    let any_basic = basic_user_env.is_some() || basic_pass_env.is_some() || basic_pass_file_env.is_some();
+    let any_basic =
+        basic_user_env.is_some() || basic_pass_env.is_some() || basic_pass_file_env.is_some();
 
     if any_bearer && any_basic {
         return Err(XinErrorOut::config(
@@ -118,11 +118,13 @@ fn parse_auth_from_global_env() -> Result<Option<AuthConfig>, XinErrorOut> {
             None => {
                 let path = basic_pass_file_env.ok_or_else(|| {
                     XinErrorOut::config(
-                        "missing XIN_BASIC_PASS (or XIN_BASIC_PASS_FILE) environment variable".to_string(),
+                        "missing XIN_BASIC_PASS (or XIN_BASIC_PASS_FILE) environment variable"
+                            .to_string(),
                     )
                 })?;
-                fs::read_to_string(path)
-                    .map_err(|e| XinErrorOut::config(format!("failed to read basic pass file: {e}")))?
+                fs::read_to_string(path).map_err(|e| {
+                    XinErrorOut::config(format!("failed to read basic pass file: {e}"))
+                })?
             }
         };
         return Ok(Some(AuthConfig::Basic {
@@ -154,7 +156,8 @@ fn resolve_account_from_config(
         return Ok(cfg.accounts.keys().next().unwrap().to_string());
     }
     Err(XinErrorOut::config(
-        "missing --account and no default account is set; run `xin config set-default <name>`".to_string(),
+        "missing --account and no default account is set; run `xin config set-default <name>`"
+            .to_string(),
     ))
 }
 
@@ -180,7 +183,8 @@ fn resolve_auth_from_account(acct: &app_config::AccountConfig) -> Result<AuthCon
                 return Ok(AuthConfig::Bearer(t));
             }
             Err(XinErrorOut::config(
-                "missing bearer token; set XIN_TOKEN (or run `xin auth set-token <TOKEN>`)".to_string(),
+                "missing bearer token; set XIN_TOKEN (or run `xin auth set-token <TOKEN>`)"
+                    .to_string(),
             ))
         }
         AuthConfigFile::Basic {
@@ -225,10 +229,14 @@ fn resolve_auth_from_account(acct: &app_config::AccountConfig) -> Result<AuthCon
     }
 }
 
-pub fn resolve_runtime_config(selected_account: Option<&str>) -> Result<ResolvedRuntimeConfig, XinErrorOut> {
+pub fn resolve_runtime_config(
+    selected_account: Option<&str>,
+) -> Result<ResolvedRuntimeConfig, XinErrorOut> {
     // Field-by-field precedence: CLI-selected account -> env -> config.
 
-    let env_base_url = std::env::var("XIN_BASE_URL").ok().map(|s| s.trim_end_matches('/').to_string());
+    let env_base_url = std::env::var("XIN_BASE_URL")
+        .ok()
+        .map(|s| s.trim_end_matches('/').to_string());
     let env_session_url = std::env::var("XIN_SESSION_URL").ok();
 
     let base_url_from_env = match (env_base_url, env_session_url) {
@@ -250,9 +258,10 @@ pub fn resolve_runtime_config(selected_account: Option<&str>) -> Result<Resolved
 
     let (account_name, acct_cfg) = if let Some(cfg) = cfg.as_ref() {
         let name = resolve_account_from_config(cfg, selected_account)?;
-        let acct = cfg.accounts.get(&name).ok_or_else(|| {
-            XinErrorOut::config(format!("unknown account '{name}' in config"))
-        })?;
+        let acct = cfg
+            .accounts
+            .get(&name)
+            .ok_or_else(|| XinErrorOut::config(format!("unknown account '{name}' in config")))?;
         (Some(name), Some(acct.clone()))
     } else {
         (selected_account.map(|s| s.to_string()), None)
@@ -309,7 +318,7 @@ pub fn resolve_runtime_config(selected_account: Option<&str>) -> Result<Resolved
     })
 }
 
-pub fn read_json_arg(value: &str) -> Result<serde_json::Value, XinErrorOut> { 
+pub fn read_json_arg(value: &str) -> Result<serde_json::Value, XinErrorOut> {
     // Support @/path/to/file.json
     if let Some(path) = value.strip_prefix('@') {
         let text = fs::read_to_string(path)

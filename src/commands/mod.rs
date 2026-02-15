@@ -108,6 +108,7 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         } => send::identities_get(account.clone(), args).await,
 
         Command::Send(args) => send::send(account.clone(), args).await,
+        Command::Reply(args) => send::reply(account.clone(), args).await,
 
         Command::Drafts { command: sub } => match sub {
             DraftsCommand::List(args) => send::drafts_list(account.clone(), args).await,
@@ -137,6 +138,5 @@ pub async fn dispatch(cli: &Cli) -> Envelope<serde_json::Value> {
         Command::Auth { command: sub } => match sub {
             AuthCommand::SetToken(args) => auth_cmd::set_token(account.as_deref(), args).await,
         },
-
     }
 }

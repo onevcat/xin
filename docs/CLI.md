@@ -535,6 +535,7 @@ Body input:
 - `--body-html` accepts a literal string or `@/path/to/file.html`.
 - At least one of `--text`, `--body-html`, `--attach` must be provided.
 
+
 Behavior (v0):
 - Resolves the Drafts mailbox id (role=`drafts`).
 - Resolves the sending Identity:
@@ -550,7 +551,23 @@ Behavior (v0):
 
 - If a server rejects an upload or references an unknown blobId, xin reports the server’s standard error (e.g. `blobNotFound`) verbatim in structured output.
 
-### 4.2 `xin drafts list|get|create|update|delete|send`
+### 4.2 `xin reply <emailId> [--reply-all] [--to ...] [--cc ...] [--bcc ...] [--subject ...] [--text ... | --body-html ... | --attach ...] [--identity <id|email>]` (v0)
+**gog analog:** `gog gmail reply`
+**JSON schema:** SCHEMA.md §7.2 (same as send)
+
+Behavior (v0):
+- `<emailId>` is the JMAP Email id (from `xin search`, `xin messages search`, or `xin inbox next`).
+- xin fetches the original email via `Email/get` to read `messageId`, `references`, `from`, `replyTo`, `to`, `cc`, and `subject`.
+- Adds reply threading headers to the outgoing draft:
+  - `In-Reply-To: <original-message-id>`
+  - `References: <existing-refs> <original-message-id>`
+- Recipient inference:
+  - If `--to` is not provided, reply to original `Reply-To` (preferred) or `From`.
+  - If `--reply-all` is set, include original `To` + `Cc` into `Cc` (excluding the sending identity).
+- If `--subject` is not provided, xin uses `Re: <original subject>`.
+- Body/attachments follow the same rules as `xin send`.
+
+### 4.3 `xin drafts list|get|create|update|delete|send`
 **gog analog:** `gog gmail drafts ...`
 **JSON schema:** SCHEMA.md §7.3
 

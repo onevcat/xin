@@ -23,6 +23,7 @@ as the stable contract, with `--plain` for human-friendly output.
 - [mailboxes](./mailboxes.md) - Mailboxes operations (alias of labels)
 - [identities](./identities.md) - Identities operations
 - [send](./send.md) - Send an email
+- [reply](./reply.md) - Reply to an email by emailId (JMAP Email id)
 - [drafts](./drafts.md) - Drafts operations
 - [history](./history.md) - History / changes
 - [watch](./watch.md) - Watch for email changes (polling Email/changes; NDJSON stream)

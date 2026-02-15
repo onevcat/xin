@@ -63,28 +63,46 @@ Collect uploaded blobs into the output (`SCHEMA.md §7.2.uploaded`).
 
 ## 3) Create draft via Email/set (RFC 8621 §4.6)
 
-### 3.1 Build deterministic MIME structure (v0)
+### 3.1 Resolve Drafts mailbox id (v0)
 
-xin v0 uses a deterministic `bodyStructure` + `bodyValues` layout for both `send` and draft creation/updating.
+- Prefer mailbox with `role="drafts"`.
+- Fallback to name match (case-insensitive) when roles are absent.
 
-- If plain+html: create a `multipart/alternative` as the body.
+The resolved Drafts mailbox id MUST be included in `mailboxIds` on create.
+
+### 3.2 Build deterministic MIME structure (v0)
+
+xin uses a deterministic `bodyStructure` + `bodyValues` layout for both `send` and draft creation.
+
+Rules:
+
+- If plain+html: create `multipart/alternative` as the body.
 - If any attachments exist: wrap in top-level `multipart/mixed` and append attachment parts.
-- Attachment parts MUST include `disposition="attachment"` (v0 explicit).
+- Attachment parts MUST include `disposition="attachment"` and SHOULD include `name`.
 
 In JMAP terms:
-- Use `bodyStructure` (tree of EmailBodyPart)
-- Use `bodyValues` keyed by `partId` for text/html bodies
-- Use `blobId` for attachment parts (from upload)
 
-Implementation note:
-- xin avoids setting `textBody/htmlBody` alongside `bodyStructure`.
-- It uses `bodyStructure` + `bodyValues` (and `blobId` for attachment parts), which is portable across JMAP servers and avoids the Stalwart rejection mode for “mixed representations”.
+- Use `bodyStructure` (tree of `EmailBodyPart`).
+- Use `bodyValues` keyed by `partId` for text/html bodies.
+- Use `blobId` for attachment parts (from upload).
 
-### 3.2 Email/set create
+Implementation note (portability):
 
-Draft mailbox id should be resolved from role=`drafts` (or name fallback), then set membership.
+- Avoid setting `textBody/htmlBody` alongside `bodyStructure`.
+- Prefer `bodyStructure` + `bodyValues` (+ `blobId` for attachments), which is portable across JMAP servers and avoids server-specific rejection modes for “mixed representations”.
 
-Example (simplified):
+### 3.3 Extra headers (reply/forward) (v0)
+
+Some write flows need additional RFC822 headers (threading, etc.).
+
+xin supports this by adding raw headers during `Email/set(create)`:
+
+- `In-Reply-To: <original-message-id>`
+- `References: <existing-refs> <original-message-id>`
+
+These headers are supplied by higher-level commands (e.g. `xin reply`) and injected via `Email/set` create using `Header::as_raw`.
+
+### 3.4 Email/set create (simplified)
 
 ```json
 {
@@ -98,24 +116,8 @@ Example (simplified):
           "keywords": {"$draft": true},
           "subject": "Hello",
           "to": [{"name": null, "email": "you@example.com"}],
-          "bodyStructure": {
-            "type": "multipart/mixed",
-            "subParts": [
-              {
-                "type": "text/plain",
-                "partId": "text"
-              },
-              {
-                "type": "application/pdf",
-                "blobId": "B123",
-                "name": "a.pdf",
-                "disposition": "attachment"
-              }
-            ]
-          },
-          "bodyValues": {
-            "text": {"value": "hi"}
-          }
+          "bodyStructure": { /* deterministic MIME layout */ },
+          "bodyValues": { /* for partId-backed bodies */ }
         }
       }
     }, "e1"]
@@ -123,12 +125,7 @@ Example (simplified):
 }
 ```
 
-Important RFC constraints to respect (RFC 8621, Email/set creation rules):
-- do not set `headers` arrays; set header fields via top-level properties
-- do not include `Content-*` headers on Email; only on body parts
-- inside EmailBodyPart, use either `partId` (with bodyValues) OR `blobId` (not both)
-
-The response `created.d1.id` is the new draft emailId.
+The response `created.d1.id` is the new draft `emailId`.
 
 ---
 
