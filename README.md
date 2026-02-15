@@ -3,7 +3,6 @@
 `xin` is an **agent-first** command line tool for **JMAP** email (Fastmail-first).
 
 - Default output is **stable JSON** (no flag needed).
-- For humans, add `--plain` to get TSV / readable blocks.
 
 > **Design goal:** `xin` is to JMAP email what `gog gmail` is to Gmail.
 > It is **not** a multi-provider wrapper and **not** a replacement for `gog`.
@@ -109,15 +108,6 @@ xin search "or:(from:github | from:atlassian) seen:false" --max 20
 
 Full syntax and rules: see [docs/CLI.md](docs/CLI.md).
 
-## Human-friendly output (`--plain`)
-
-`--plain` is for humans (not a stability contract). It produces TSV for lists and readable blocks for details:
-
-```bash
-xin --plain search "in:inbox" --max 20
-xin --plain get <emailId> --format full
-```
-
 ## Recommended workflow
 
 - **Triage inbox**:
@@ -132,6 +122,16 @@ xin --plain get <emailId> --format full
   - `xin drafts create|rewrite|send ...`
 - **Automation**:
   - Use `xin history` / `xin watch` (JSON/NDJSON by default).
+
+## Human-friendly output (`--plain`)
+
+If you want a simpler, human-friendly view (e.g. to confirm a list before acting), add `--plain`.
+It’s **not** a stability contract; agents should keep using the default JSON output.
+
+```bash
+xin --plain search "in:inbox" --max 20
+xin --plain get <emailId> --format full
+```
 
 ## Output formats
 

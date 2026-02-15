@@ -28,7 +28,6 @@ Options:
 Examples:
   xin attachment <emailId> <blobId>
   xin attachment <emailId> <blobId> --out ./file.bin
-  xin --plain attachment <emailId> <blobId>
 ```
 
 ## JSON Schema

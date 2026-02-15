@@ -32,11 +32,11 @@ Options:
 Examples:
   xin watch --checkpoint /tmp/xin.watch.token
   xin watch --since <state> --once
-  xin --plain watch --checkpoint /tmp/xin.watch.token
 
 Notes:
   - Default output is NDJSON stream for agents.
-  - Use --no-envelope (or --plain) for stream-only output.
+  - Use --pretty for human-friendly pretty JSON.
+  - Use --no-envelope for stream-only output (no final envelope line).
 ```
 
 ## JSON Schema

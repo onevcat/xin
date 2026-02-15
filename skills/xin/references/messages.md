@@ -55,7 +55,7 @@ Examples:
   xin messages search --filter-json @filter.json --max 50
 
 Notes:
-  - JSON is default. Use --plain for human-friendly output.
+  - Default output is stable JSON.
 ```
 
 ## JSON Schema

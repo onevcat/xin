@@ -81,7 +81,6 @@ Options:
 
 Examples:
   xin thread attachments <threadId>
-  xin --plain thread attachments <threadId>
 ```
 
 ### modify

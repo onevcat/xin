@@ -8,7 +8,7 @@ allowed-tools: Bash(xin:*)
 
 Agent-first JMAP CLI for Fastmail email management.
 
-Generated from xin CLI v0.1.0
+Generated from xin CLI v{{VERSION}}
 
 ## Prerequisites
 
@@ -100,57 +100,13 @@ xin send --to user@example.com --subject "Hello" --text @/tmp/body.txt
 
 ## Available Commands
 
-```
-xin search      # Search (thread-like by default)
-xin messages    # Per-email search commands
-xin get         # Get a single email
-xin thread      # Thread operations
-xin attachment  # Download an attachment
-xin url         # Print webmail URL(s) (Fastmail-only)
-xin archive     # Archive emails
-xin read        # Mark emails as read
-xin unread      # Mark emails as unread
-xin trash       # Move emails to trash
-xin batch       # Batch operations
-xin inbox       # Inbox-zero helpers
-xin labels      # Labels (mailboxes) operations
-xin mailboxes   # Mailboxes operations (alias of labels)
-xin identities  # Identities operations
-xin send        # Send an email
-xin reply       # Reply to an email by emailId (JMAP Email id)
-xin drafts      # Drafts operations
-xin history     # History / changes
-xin watch       # Watch for email changes (polling Email/changes; NDJSON stream)
-xin config      # Config file operations
-xin auth        # Credential helpers
-```
+{{COMMANDS}}
 
 ## Reference Documentation
 
 - High-level overview: [commands.md](references/commands.md)
 
-- [search](references/search.md) - Search (thread-like by default)
-- [messages](references/messages.md) - Per-email search commands
-- [get](references/get.md) - Get a single email
-- [thread](references/thread.md) - Thread operations
-- [attachment](references/attachment.md) - Download an attachment
-- [url](references/url.md) - Print webmail URL(s) (Fastmail-only)
-- [archive](references/archive.md) - Archive emails
-- [read](references/read.md) - Mark emails as read
-- [unread](references/unread.md) - Mark emails as unread
-- [trash](references/trash.md) - Move emails to trash
-- [batch](references/batch.md) - Batch operations
-- [inbox](references/inbox.md) - Inbox-zero helpers
-- [labels](references/labels.md) - Labels (mailboxes) operations
-- [mailboxes](references/mailboxes.md) - Mailboxes operations (alias of labels)
-- [identities](references/identities.md) - Identities operations
-- [send](references/send.md) - Send an email
-- [reply](references/reply.md) - Reply to an email by emailId (JMAP Email id)
-- [drafts](references/drafts.md) - Drafts operations
-- [history](references/history.md) - History / changes
-- [watch](references/watch.md) - Watch for email changes (polling Email/changes; NDJSON stream)
-- [config](references/config.md) - Config file operations
-- [auth](references/auth.md) - Credential helpers
+{{REFERENCE_TOC}}
 
 For common workflows and examples, see [common-tasks](./references/common-tasks.md).
 

@@ -45,18 +45,23 @@ Options:
 Examples:
   xin search "in:inbox" --max 20
   xin search "in:inbox seen:false" --max 20
+  xin search "from:github subject:release" --max 10
+  xin search "has:attachment after:2026-01-01" --max 20
+  xin search "-in:trash" --max 20
   xin search "or:(from:github | from:atlassian) seen:false" --max 20
-  xin search --filter-json '{"text":"hello"}' --max 5
+  xin search --filter-json @filter.json --max 50
 
 Query sugar (not Gmail-compatible):
-  from:, to:, subject:, text:, in:, seen:true|false, flagged:true|false
-  has:attachment, after:<YYYY-MM-DD>, before:<YYYY-MM-DD>
+  from:<text> to:<text> cc:<text> bcc:<text>
+  subject:<text> text:<text>
+  in:<mailbox> (role/name/id; e.g. inbox, trash, junk, archive)
+  seen:true|false flagged:true|false
+  has:attachment after:<YYYY-MM-DD> before:<YYYY-MM-DD>
   -term (NOT), or:(a | b)
 
 Tips:
   - Quote multi-term queries.
   - Use --filter-json for precise server-owned filters (accepts @/path.json).
-  - Use --plain for human-friendly output.
 ```
 
 ## JSON Schema
