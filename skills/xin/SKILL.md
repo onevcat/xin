@@ -23,18 +23,16 @@ If not built, see: https://github.com/onevcat/xin
 ## Quick Configuration
 
 ```bash
-# Initialize config
-xin config init
-
 # Set Fastmail API token (Bearer token)
-xin auth set-token <TOKEN>
+# This bootstraps a minimal config automatically if missing.
+xin auth set-token fmu1-xxxxx
 ```
 
 ## Best Practices
 
 ### Output Formats
 
-- **Use `--json` (default)** for scripting and agent use - this is the **stable contract**
+- **JSON is the default** for scripting and agent use — this is the **stable contract**
 - Use `--plain` for human interaction (TSV lists, readable blocks)
 - Never parse `--plain` output in automation
 
@@ -161,16 +159,16 @@ xin outputs stable JSON by default. Common patterns:
 
 ```bash
 # Extract email IDs
-xin search "in:inbox" --max 10 --json | jq -r '.data.items[].emailId'
+xin search "in:inbox" --max 10 | jq -r '.data.items[].emailId'
 
 # Get specific fields
-xin search "from:github" --max 5 --json | jq '.data.items[] | {subject, from: .from[0].email}'
+xin search "from:github" --max 5 | jq '.data.items[] | {subject, from: .from[0].email}'
 
 # Check for errors
-xin search "in:inbox" --json | jq '.error'
+xin search "in:inbox" | jq '.error'
 
 # Pagination
-xin search "in:inbox" --max 100 --json | jq -r '.meta.nextPage // "none"'
+xin search "in:inbox" --max 100 | jq -r '.meta.nextPage // "none"'
 ```
 
 ## Environment Variables

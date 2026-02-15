@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
     name = "xin",
     version,
     about = "Agent-first JMAP CLI (Fastmail-first)",
-    after_help = "Examples:\n  xin config init\n  xin auth set-token <TOKEN>\n  xin search \"from:alice seen:false\" --max 10\n  xin --plain search \"subject:invoice\" --max 5\n  xin get <emailId> --format full\n  xin watch --checkpoint /tmp/xin.watch.token\n\nUse `xin <command> --help` for more examples and flags.\nJSON (`--json`) is the stable contract; `--plain` is for humans."
+    after_help = "Examples:\n  xin auth set-token fmu1-xxxxx\n  xin search \"in:inbox seen:false\" --max 10\n  xin messages search \"in:inbox\" --max 50 | jq -r '.data.items[].subject'\n  xin inbox next\n  xin get <emailId> --format full\n\nNotes:\n  - JSON is default (stable, agent-first contract).\n  - Use --plain for human-friendly output."
 )]
 pub struct Cli {
     /// Output JSON to stdout (default).
@@ -143,7 +143,7 @@ pub enum Command {
 
 #[derive(Args, Debug)]
 #[command(
-    after_help = "Examples:\n  xin search \"from:alice seen:false\" --max 10\n  xin search --filter-json '{\"text\":\"hello\"}' --max 5\n  xin --plain search \"subject:invoice\" --max 5\n\nTips:\n  - Quote multi-term queries.\n  - Use --filter-json for precise server-owned filters (accepts @/path.json)."
+    after_help = "Examples:\n  xin search \"in:inbox\" --max 20\n  xin search \"in:inbox seen:false\" --max 20\n  xin search \"or:(from:github | from:atlassian) seen:false\" --max 20\n  xin search --filter-json '{\"text\":\"hello\"}' --max 5\n\nQuery sugar (not Gmail-compatible):\n  from:, to:, subject:, text:, in:, seen:true|false, flagged:true|false\n  has:attachment, after:<YYYY-MM-DD>, before:<YYYY-MM-DD>\n  -term (NOT), or:(a | b)\n\nTips:\n  - Quote multi-term queries.\n  - Use --filter-json for precise server-owned filters (accepts @/path.json).\n  - Use --plain for human-friendly output."
 )]
 pub struct SearchArgs {
     #[arg(value_name = "QUERY", allow_hyphen_values = true)]
@@ -180,7 +180,7 @@ pub enum MessagesCommand {
 
 #[derive(Args, Debug)]
 #[command(
-    after_help = "Examples:\n  xin messages search \"from:alice\" --max 20\n  xin messages search --filter-json @filter.json --max 50\n  xin --plain messages search \"subject:meeting\" --max 5"
+    after_help = "Examples:\n  xin messages search \"in:inbox\" --max 50\n  xin messages search \"from:github\" --max 20\n  xin messages search --filter-json @filter.json --max 50\n\nNotes:\n  - JSON is default. Use --plain for human-friendly output."
 )]
 pub struct MessagesSearchArgs {
     #[arg(value_name = "QUERY", allow_hyphen_values = true)]
@@ -198,7 +198,7 @@ pub struct MessagesSearchArgs {
 
 #[derive(Args, Debug)]
 #[command(
-    after_help = "Examples:\n  xin get <emailId>\n  xin get <emailId> --format full\n  xin --plain get <emailId> --format full\n  xin get <emailId> --headers message-id,in-reply-to\n\nNotes:\n  - --format metadata is fast and stable for agents.\n  - --format full may include truncation warnings in meta.warnings."
+    after_help = "Examples:\n  xin get <emailId>\n  xin get <emailId> --format full\n  xin get <emailId> --headers message-id,in-reply-to\n\nNotes:\n  - --format metadata is fast and stable for agents.\n  - --format full may include truncation warnings in meta.warnings.\n  - Use --plain for human-friendly output."
 )]
 pub struct GetArgs {
     pub email_id: String,

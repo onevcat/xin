@@ -43,13 +43,20 @@ Options:
           Print help
 
 Examples:
-  xin search "from:alice seen:false" --max 10
+  xin search "in:inbox" --max 20
+  xin search "in:inbox seen:false" --max 20
+  xin search "or:(from:github | from:atlassian) seen:false" --max 20
   xin search --filter-json '{"text":"hello"}' --max 5
-  xin --plain search "subject:invoice" --max 5
+
+Query sugar (not Gmail-compatible):
+  from:, to:, subject:, text:, in:, seen:true|false, flagged:true|false
+  has:attachment, after:<YYYY-MM-DD>, before:<YYYY-MM-DD>
+  -term (NOT), or:(a | b)
 
 Tips:
   - Quote multi-term queries.
   - Use --filter-json for precise server-owned filters (accepts @/path.json).
+  - Use --plain for human-friendly output.
 ```
 
 ## JSON Schema

@@ -1,6 +1,9 @@
 # xin（信）
 
-Agent-first **JMAP** CLI (Fastmail-first).
+`xin` is an **agent-first** command line tool for **JMAP** email (Fastmail-first).
+
+- Default output is **stable JSON** (no flag needed).
+- For humans, add `--plain` to get TSV / readable blocks.
 
 > **Design goal:** `xin` is to JMAP email what `gog gmail` is to Gmail.
 > It is **not** a multi-provider wrapper and **not** a replacement for `gog`.
@@ -33,29 +36,20 @@ xin search --max 1
 xin auth set-token fmu1-xxxxx
 ```
 
-2) Search and read:
+2) Search and read (JSON by default):
 
 ```bash
-# JSON-first (stable contract)
 xin search "from:alice seen:false" --max 10
 xin get <emailId> --format full
-
-# Human-friendly output
-xin --plain search "subject:invoice" --max 5
-xin --plain get <emailId> --format full
 ```
 
-3) Watch for changes (stream):
+3) Watch for changes (stream; default is NDJSON for agents):
 
 ```bash
-# NDJSON stream (agents)
 xin watch --checkpoint /tmp/xin.watch.token
-
-# Plain stream (humans)
-xin --plain watch --checkpoint /tmp/xin.watch.token
 ```
 
-## Most common agent flows (copy/paste)
+## Agent recipes (copy/paste)
 
 > If you’re running from source, prefix each command with:
 >
@@ -63,50 +57,65 @@ xin --plain watch --checkpoint /tmp/xin.watch.token
 > cargo run --bin xin --
 > ```
 
-### 1) List what's currently in my inbox
+### 1) Get inbox → extract subjects → filter with jq
 
 ```bash
-# Human-friendly
-xin --plain messages search "in:inbox" --max 50
+# 1) Get current inbox (per-email)
+xin messages search "in:inbox" --max 200 \
+  > /tmp/xin.inbox.json
 
-# JSON (stable contract)
-xin messages search "in:inbox" --max 50
+# 2) Extract subjects (and emailId so an agent can act on it)
+jq -r '.data.items[] | [.emailId, (.subject // "")] | @tsv' /tmp/xin.inbox.json
+
+# 3) Filter by subject keyword (case-insensitive)
+jq -r '.data.items[]
+  | select((.subject // "") | test("invoice"; "i"))
+  | {emailId, subject, from: (.from[0].email // null)}'
+  /tmp/xin.inbox.json
 ```
 
-### 2) Archive emails I don't need
+### 2) Archive emails I don’t need (batch)
 
 ```bash
-# Archive ONE message
-xin inbox do <emailId> archive
-
-# Archive the whole thread containing this message
-xin inbox do <emailId> archive --whole-thread
-
 # Archive MANY (example: all inbox items currently returned by search)
-xin messages search "in:inbox" --max 200 --json \
+xin messages search "in:inbox" --max 200 \
   | jq -r '.data.items[].emailId' \
   | xargs -n 50 sh -c 'xin batch modify "$@" --remove inbox --add archive' _
 ```
 
-### 3) Read one email (details)
+### 3) Inbox-zero helper
 
 ```bash
-# Full content
-xin --plain get <emailId> --format full
+# Pick the next email to process (default: unread-only)
+xin inbox next
 
-# Metadata-only (faster)
-xin --plain get <emailId> --format metadata
+# Apply an action (optionally for the whole thread)
+xin inbox do <emailId> archive
+xin inbox do <emailId> archive --whole-thread
 ```
 
-### 4) Reply (send) with a short message
+## Query syntax (quick)
+
+`xin search` uses a small sugar DSL (not Gmail-compatible). Common examples:
 
 ```bash
-# Minimal reply (v0): send a new message to the original sender.
-# (Threading headers like In-Reply-To are not wired in the CLI yet.)
-xin send --to <sender@example.com> --subject "Re: <subject>" --text "XXXX"
+xin search "in:inbox" --max 20
+xin search "in:inbox seen:false" --max 20
+xin search "from:github subject:release" --max 10
+xin search "has:attachment after:2026-01-01" --max 20
+xin search "-in:trash" --max 20
+xin search "or:(from:github | from:atlassian) seen:false" --max 20
+```
 
-# Fastmail-only: generate a web URL for the original message (useful if you want to reply in UI)
-xin url <emailId>
+Full syntax and rules: see [docs/CLI.md](docs/CLI.md).
+
+## Human-friendly output (`--plain`)
+
+`--plain` is for humans (not a stability contract). It produces TSV for lists and readable blocks for details:
+
+```bash
+xin --plain search "in:inbox" --max 20
+xin --plain get <emailId> --format full
 ```
 
 ## Recommended workflow
@@ -122,12 +131,12 @@ xin url <emailId>
   - `xin send ...`
   - `xin drafts create|rewrite|send ...`
 - **Automation**:
-  - Use `xin history` / `xin watch` with `--json` (stable) for agents.
+  - Use `xin history` / `xin watch` (JSON/NDJSON by default).
 
 ## Output formats
 
-- `--json` is the **stable, agent-first contract** (see `docs/SCHEMA.md`).
-- `--plain` is **for humans** (TSV for lists, readable blocks for details). It is not a stability contract.
+- Default output is **JSON** (stable, agent-first contract; see `docs/SCHEMA.md`).
+- `--plain` is **for humans** (TSV / readable blocks). Don’t parse it in automation.
 
 ## Provider support
 

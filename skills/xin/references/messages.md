@@ -50,9 +50,12 @@ Options:
   -h, --help                       Print help
 
 Examples:
-  xin messages search "from:alice" --max 20
+  xin messages search "in:inbox" --max 50
+  xin messages search "from:github" --max 20
   xin messages search --filter-json @filter.json --max 50
-  xin --plain messages search "subject:meeting" --max 5
+
+Notes:
+  - JSON is default. Use --plain for human-friendly output.
 ```
 
 ## JSON Schema

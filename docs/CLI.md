@@ -102,6 +102,33 @@ Optional:
 
 - Returns: list of **thread-like** results by default (see Threading below).
 
+#### Query sugar quick examples
+
+```bash
+# Mailbox role/name
+xin search "in:inbox" --max 20
+xin search "-in:trash" --max 20
+
+# State (keywords)
+xin search "in:inbox seen:false" --max 20
+xin search "flagged:true" --max 20
+
+# Content
+xin search "from:github subject:release" --max 10
+xin search "text:invoice" --max 10
+
+# Attachments + time
+xin search "has:attachment after:2026-01-01" --max 20
+
+# Boolean OR
+xin search "or:(from:github | from:atlassian) seen:false" --max 20
+```
+
+Notes:
+- Quote multi-term queries.
+- `in:<mailbox>` resolves by **role** first (e.g. `inbox`, `trash`, `junk`), then by name.
+- If you need full control, use `--filter-json` (server-owned JMAP filter input).
+
 Threading (fixed for v0):
 - xin uses JMAP `Email/query` with `collapseThreads=true` by default.
 - Each result item corresponds to **at most one Email per Thread** in the matching set.

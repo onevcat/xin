@@ -39,12 +39,12 @@ Options:
 Examples:
   xin get <emailId>
   xin get <emailId> --format full
-  xin --plain get <emailId> --format full
   xin get <emailId> --headers message-id,in-reply-to
 
 Notes:
   - --format metadata is fast and stable for agents.
   - --format full may include truncation warnings in meta.warnings.
+  - Use --plain for human-friendly output.
 ```
 
 ## JSON Schema
