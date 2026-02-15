@@ -2,6 +2,11 @@
 name = "xin"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Agent-first JMAP CLI (Fastmail-first)."
+repository = "https://github.com/onevcat/xin"
+homepage = "https://github.com/onevcat/xin"
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
