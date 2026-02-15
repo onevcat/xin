@@ -28,6 +28,32 @@ jobs:
       - name: Build
         run: cargo build --release --verbose
 
+  docs:
+    name: Docs up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v2.x
+
+      - name: Build xin (debug)
+        run: cargo build --bin xin
+
+      - name: Regenerate skill references
+        run: deno run --allow-run --allow-read --allow-write skills/xin/scripts/generate-docs.ts
+
+      - name: Ensure no diffs
+        run: git diff --exit-code
+
   smoke:
     name: Smoke Test
     runs-on: ubuntu-latest
