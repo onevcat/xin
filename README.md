@@ -16,28 +16,24 @@ brew install onevcat/tap/xin
 Minimal demo (Fastmail):
 
 ```bash
-xin config init
+# This will bootstrap a minimal config automatically if missing.
 xin auth set-token fmu1-xxxxx   # Fastmail API token
+
 xin search --max 1
 # or: xin inbox next
 ```
 
 ## Quick start (Fastmail)
 
-1) Initialize config:
+1) Set your Fastmail API token (Bearer token):
 
 ```bash
-xin config init
-```
-
-2) Set your Fastmail API token (Bearer token):
-
-```bash
+# This command will bootstrap a minimal config automatically if missing.
 # example token format: fmu1-xxxxx
 xin auth set-token fmu1-xxxxx
 ```
 
-3) Search and read:
+2) Search and read:
 
 ```bash
 # JSON-first (stable contract)
@@ -49,7 +45,7 @@ xin --plain search "subject:invoice" --max 5
 xin --plain get <emailId> --format full
 ```
 
-4) Watch for changes (stream):
+3) Watch for changes (stream):
 
 ```bash
 # NDJSON stream (agents)
