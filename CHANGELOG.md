@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-02-16
+
+### Fixed
+- Fix `xin reply` on Fastmail: set threading headers (`In-Reply-To`, `References`) via JMAP parsed header forms (`header:*:asMessageIds`) instead of raw header text, avoiding `invalidProperties (header:In-Reply-To)`.
+
+### Tests
+- Strengthen mock assertions for `reply` to validate the exact JMAP request shape.
+- Add unit test to cover parsed message-id tokens and reference de-duplication.
+
 ## [0.1.1] - 2026-02-15
 
 ### Fixed
