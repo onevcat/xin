@@ -8,7 +8,7 @@ allowed-tools: Bash(xin:*)
 
 Agent-first JMAP CLI for Fastmail email management.
 
-Generated from xin CLI v0.1.1
+Generated from xin CLI v0.1.2
 
 ## Prerequisites
 
