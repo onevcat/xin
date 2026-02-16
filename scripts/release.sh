@@ -128,4 +128,42 @@ log_info "Pushing branch + tag"
 git push origin "$CURRENT_BRANCH"
 git push origin "$VERSION_TAG"
 
+# 8) Create GitHub Release page (so we don't forget)
+if command -v gh >/dev/null 2>&1; then
+  log_info "Creating GitHub Release page for $VERSION_TAG"
+
+  REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
+  if [[ -z "${REPO:-}" ]]; then
+    ORIGIN_URL="$(git remote get-url origin)"
+    REPO="$(echo "$ORIGIN_URL" | sed -E 's#(git@github.com:|https://github.com/)##; s#\\.git$##')"
+  fi
+
+  if [[ -z "${REPO:-}" ]]; then
+    log_warn "Could not determine GitHub repo; skipped creating release page."
+  elif gh release view "$VERSION_TAG" --repo "$REPO" >/dev/null 2>&1; then
+    log_warn "GitHub release $VERSION_TAG already exists; skipping."
+  else
+    NOTES_FILE="$(mktemp)"
+
+    # Extract this version's section from CHANGELOG.md
+    perl -0777 -ne 'if(/## \\['"$CHANGELOG_VERSION"'\\] - [^\\n]*\\n(.*?)(?=\\n## \\[|\\z)/s){print $1}' \
+      CHANGELOG.md > "$NOTES_FILE"
+
+    if [[ ! -s "$NOTES_FILE" ]]; then
+      cat <<EOF > "$NOTES_FILE"
+See CHANGELOG.md for details.
+EOF
+    fi
+
+    gh release create "$VERSION_TAG" \
+      --repo "$REPO" \
+      --title "xin $VERSION_TAG" \
+      --notes-file "$NOTES_FILE"
+
+    rm -f "$NOTES_FILE"
+  fi
+else
+  log_warn "gh CLI not found; skipped creating GitHub release."
+fi
+
 log_info "Done. Monitor: https://github.com/onevcat/xin/actions"
