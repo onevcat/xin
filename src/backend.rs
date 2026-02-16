@@ -1,6 +1,6 @@
 use jmap_client::core::query::QueryResponse;
 use jmap_client::core::set::SetObject;
-use jmap_client::email::{Email, Header};
+use jmap_client::email::Email;
 // (identity/submission methods are called via raw JMAP requests)
 use jmap_client::mailbox;
 use jmap_client::thread;
@@ -697,6 +697,9 @@ impl Backend {
     }
 
     /// Create a draft email with optional extra headers (for reply/forward).
+    ///
+    /// Note: for safety and portability, prefer parsed header forms when possible
+    /// (e.g. `Header::as_message_ids("In-Reply-To", ..)`), instead of raw header text.
     pub async fn create_draft_email_with_headers(
         &self,
         mailbox_id: &str,
@@ -709,7 +712,7 @@ impl Backend {
         text: Option<&str>,
         html: Option<&str>,
         attachments: &[UploadedBlob],
-        extra_headers: Option<&[(String, String)]>,
+        extra_headers: Option<&[(jmap_client::email::Header, jmap_client::email::HeaderValue)]>,
     ) -> Result<Email, XinErrorOut> {
         let mut request = self.j.client().build();
         let create = request.set_email().create();
@@ -737,10 +740,8 @@ impl Backend {
 
         // Add extra headers (e.g., In-Reply-To, References, Reply-To)
         if let Some(headers) = extra_headers {
-            use jmap_client::email::HeaderValue;
-            for (name, value) in headers {
-                let header = Header::as_raw(name.clone(), false);
-                create.header(header, HeaderValue::AsText(value.clone()));
+            for (header, value) in headers {
+                create.header(header.clone(), value.clone());
             }
         }
 

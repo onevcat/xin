@@ -246,6 +246,8 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
         .await;
 
     // Fetch original via Email/get
+    // Simulate `header:*:asMessageIds` parsed tokens (no surrounding angle brackets).
+    // This matches what Fastmail returns and is the tricky case for `xin reply`.
     let get_response = json!({
         "sessionState": "s",
         "methodResponses": [
@@ -255,8 +257,8 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
                 "list": [{
                     "id": "orig1",
                     "threadId": "t1",
-                    "messageId": ["<orig@example.com>"],
-                    "references": ["<r0@example.com>"],
+                    "messageId": ["orig@example.com"],
+                    "references": ["r0@example.com"],
                     "from": [{"name": "Alice", "email": "alice@example.com"}],
                     "to": [{"name": null, "email": "me@example.com"}],
                     "cc": [{"name": null, "email": "cc1@example.com"}]
@@ -288,12 +290,66 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
         ]
     });
 
-    // Ensure threading headers are present in Email/set create.
+    // Ensure reply threading is set using JMAP parsed header forms (not raw header text).
+    // This avoids RFC 5322 formatting pitfalls (e.g. missing angle brackets) and matches Fastmail behavior.
     Mock::given(method("POST"))
         .and(path("/jmap"))
-        .and(body_string_contains("Email/set"))
-        .and(body_string_contains("In-Reply-To"))
-        .and(body_string_contains("References"))
+        .and(|req: &wiremock::Request| {
+            // Match only the Email/set call.
+            let Ok(body) = std::str::from_utf8(&req.body) else {
+                return false;
+            };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
+                return false;
+            };
+
+            // JMAP request body should have methodCalls.
+            let Some(method_calls) = v.get("methodCalls").and_then(|x| x.as_array()) else {
+                return false;
+            };
+
+            // Find Email/set call.
+            let email_set = method_calls.iter().find(|call| {
+                call.as_array()
+                    .and_then(|a| a.get(0))
+                    .and_then(|m| m.as_str())
+                    == Some("Email/set")
+            });
+            let Some(email_set) = email_set else {
+                return false;
+            };
+
+            let Some(args) = email_set.as_array().and_then(|a| a.get(1)) else {
+                return false;
+            };
+            let Some(create) = args.get("create").and_then(|c| c.as_object()) else {
+                return false;
+            };
+            // Pick the first created Email object.
+            let Some((_cid, obj)) = create.iter().next() else {
+                return false;
+            };
+            let Some(obj) = obj.as_object() else {
+                return false;
+            };
+
+            // We must set parsed header properties, not raw header strings.
+            // header:In-Reply-To:asMessageIds -> ["orig@example.com"]
+            // header:References:asMessageIds -> ["r0@example.com", "orig@example.com"]
+            match (
+                obj.get("header:In-Reply-To:asMessageIds"),
+                obj.get("header:References:asMessageIds"),
+            ) {
+                (Some(in_reply_to), Some(references)) => {
+                    in_reply_to == &serde_json::json!(["orig@example.com"])
+                        && references
+                            == &serde_json::json!(["r0@example.com", "orig@example.com"])
+                        // Ensure we did NOT try to write raw header text with angle brackets.
+                        && !body.contains("<orig@example.com>")
+                }
+                _ => false,
+            }
+        })
         .respond_with(ResponseTemplate::new(200).set_body_json(email_set_response))
         .expect(1)
         .mount(&server)

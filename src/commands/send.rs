@@ -85,25 +85,109 @@ fn resolve_mailbox_id(s: &str, mailboxes: &[jmap_client::mailbox::Mailbox]) -> O
 }
 
 /// Build reply headers (In-Reply-To + References) from the original email.
+///
+/// RFC 8621 exposes `messageId`/`references` as values derived from `header:*:asMessageIds`.
+/// These are *parsed* message-id tokens (typically without surrounding angle brackets).
+///
+/// To avoid RFC 5322 formatting pitfalls, we set reply threading headers using the JMAP parsed
+/// header forms:
+/// - `header:In-Reply-To:asMessageIds` (String[])
+/// - `header:References:asMessageIds` (String[])
+///
+/// This is more portable across servers (including Fastmail) than writing raw header text.
 fn build_reply_headers(
     original: &jmap_client::email::Email,
-) -> Result<Vec<(String, String)>, XinErrorOut> {
+) -> Result<Vec<(jmap_client::email::Header, jmap_client::email::HeaderValue)>, XinErrorOut> {
+    use jmap_client::email::{Header, HeaderValue};
+
+    fn normalize_msg_id_token(s: &str) -> String {
+        let t = s.trim();
+        if t.starts_with('<') && t.ends_with('>') && t.len() >= 2 {
+            t[1..t.len() - 1].trim().to_string()
+        } else {
+            t.to_string()
+        }
+    }
+
     let orig_msg_id = original
         .message_id()
         .and_then(|ids| ids.first())
-        .cloned()
+        .map(|s| normalize_msg_id_token(s))
+        .filter(|s| !s.is_empty())
         .ok_or_else(|| XinErrorOut::usage("original email missing Message-ID".to_string()))?;
 
-    let mut headers: Vec<(String, String)> = Vec::new();
-    headers.push(("In-Reply-To".to_string(), orig_msg_id.clone()));
+    // References: keep existing refs (if any) and append original msg-id.
+    // De-dup while preserving order.
+    use std::collections::HashSet;
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut refs_out: Vec<String> = Vec::new();
 
-    let mut refs: Vec<String> = Vec::new();
     if let Some(existing_refs) = original.references() {
-        refs.extend(existing_refs.iter().cloned());
+        for r in existing_refs {
+            let v = normalize_msg_id_token(r);
+            if v.is_empty() {
+                continue;
+            }
+            if seen.insert(v.clone()) {
+                refs_out.push(v);
+            }
+        }
     }
-    refs.push(orig_msg_id);
-    headers.push(("References".to_string(), refs.join(" ")));
-    Ok(headers)
+
+    if seen.insert(orig_msg_id.clone()) {
+        refs_out.push(orig_msg_id.clone());
+    }
+
+    Ok(vec![
+        (
+            Header::as_message_ids("In-Reply-To", false),
+            HeaderValue::AsTextAll(vec![orig_msg_id]),
+        ),
+        (
+            Header::as_message_ids("References", false),
+            HeaderValue::AsTextAll(refs_out),
+        ),
+    ])
+}
+
+#[cfg(test)]
+mod reply_headers_tests {
+    use super::*;
+
+    #[test]
+    fn reply_headers_use_parsed_message_ids_and_dedup_refs() {
+        use jmap_client::email::{HeaderForm, HeaderValue};
+        use serde_json::json;
+
+        // Simulate weird but possible inputs: brackets and duplicate refs.
+        let original: jmap_client::email::Email = serde_json::from_value(json!({
+            "messageId": ["<orig@example.com>"],
+            "references": ["r0@example.com", "<orig@example.com>"]
+        }))
+        .expect("deserialize Email");
+
+        let headers = build_reply_headers(&original).expect("build headers");
+        assert_eq!(headers.len(), 2);
+
+        // In-Reply-To
+        assert_eq!(headers[0].0.name, "In-Reply-To");
+        assert!(matches!(headers[0].0.form, HeaderForm::MessageIds));
+        assert!(!headers[0].0.all);
+        match &headers[0].1 {
+            HeaderValue::AsTextAll(v) => assert_eq!(v, &vec!["orig@example.com".to_string()]),
+            other => panic!("unexpected header value: {other:?}"),
+        }
+
+        // References (dedup + normalized)
+        assert_eq!(headers[1].0.name, "References");
+        assert!(matches!(headers[1].0.form, HeaderForm::MessageIds));
+        match &headers[1].1 {
+            HeaderValue::AsTextAll(v) => {
+                assert_eq!(v, &vec!["r0@example.com".to_string(), "orig@example.com".to_string()])
+            }
+            other => panic!("unexpected header value: {other:?}"),
+        }
+    }
 }
 
 fn default_reply_subject(original_subject: Option<&str>) -> String {
