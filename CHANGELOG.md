@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-02-17
+
+
 ### Fixed
 - Fastmail: if `xin reply` draft creation fails with `invalidProperties (header:In-Reply-To/References)` when using `header:*:asMessageIds`, retry with raw threading header text (`header:*:asText`) to ensure replies can still be sent.
 
