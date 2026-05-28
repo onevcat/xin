@@ -69,7 +69,7 @@ jq -r '.data.items[] | [.emailId, (.subject // "")] | @tsv' /tmp/xin.inbox.json
 # 3) Filter by subject keyword (case-insensitive)
 jq -r '.data.items[]
   | select((.subject // "") | test("invoice"; "i"))
-  | {emailId, subject, from: (.from[0].email // null)}'
+  | {emailId, subject, from: (.from[0].email // null)}' \
   /tmp/xin.inbox.json
 ```
 
