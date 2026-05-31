@@ -1,6 +1,14 @@
 services:
   stalwart:
-    image: stalwartlabs/stalwart:latest
+    # Pin to the last Stalwart release whose Docker image matches this harness.
+    # A floating :latest drifted to 0.16.x, which dropped the entrypoint that
+    # auto-loads our mounted config (via STALWART_PATH), moved the default config
+    # path to /etc/stalwart/config.json, and changed the fallback-admin auth
+    # contract so the plaintext secret in config.toml no longer authenticates
+    # (management API returned 401). That broke the Smoke Test seed step with
+    # "management API did not become ready". Upgrading the harness to 0.16.x is
+    # tracked separately; pin here to keep CI green and reproducible.
+    image: stalwartlabs/stalwart:v0.15.4
     container_name: xin-stalwart
     # Run as the host user so the bind-mounted .state directory is removable by the test runner.
     # (GitHub Actions Linux runners otherwise end up with root-owned files under .state.)
