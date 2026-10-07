@@ -692,14 +692,15 @@ impl Backend {
             html,
             attachments,
             None, // no extra headers
+            None, // no reply threading
         )
         .await
     }
 
-    /// Create a draft email with optional extra headers (for reply/forward).
+    /// Create a draft email with optional extra headers and reply threading.
     ///
-    /// Note: for safety and portability, prefer parsed header forms when possible
-    /// (e.g. `Header::as_message_ids("In-Reply-To", ..)`), instead of raw header text.
+    /// `reply_threading` is `(inReplyTo, references)` as msg-ids without angle brackets; it is
+    /// written via the Email `inReplyTo` / `references` properties, never `header:*` forms.
     pub async fn create_draft_email_with_headers(
         &self,
         mailbox_id: &str,
@@ -713,6 +714,7 @@ impl Backend {
         html: Option<&str>,
         attachments: &[UploadedBlob],
         extra_headers: Option<&[(jmap_client::email::Header, jmap_client::email::HeaderValue)]>,
+        reply_threading: Option<(&[String], &[String])>,
     ) -> Result<Email, XinErrorOut> {
         let mut request = self.j.client().build();
         let create = request.set_email().create();
@@ -738,7 +740,18 @@ impl Backend {
             create.subject(s.to_string());
         }
 
-        // Add extra headers (e.g., In-Reply-To, References, Reply-To)
+        // Threading: use the Email `inReplyTo` / `references` properties (RFC 8621 4.1.2).
+        // Fastmail rejects `header:In-Reply-To:*` / `header:References:*` on create.
+        if let Some((in_reply_to, references)) = reply_threading {
+            if !in_reply_to.is_empty() {
+                create.in_reply_to(in_reply_to.iter().cloned());
+            }
+            if !references.is_empty() {
+                create.references(references.iter().cloned());
+            }
+        }
+
+        // Add extra headers (e.g., Reply-To)
         if let Some(headers) = extra_headers {
             for (header, value) in headers {
                 create.header(header.clone(), value.clone());

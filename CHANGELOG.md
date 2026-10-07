@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `xin reply` on Fastmail for Message-IDs it rejects in `header:*:asMessageIds` form (e.g. Gmail IDs containing `=`): set threading via the Email `inReplyTo` / `references` properties instead. The `header:*:asText` fallback is removed; RFC 8621 does not allow the Text form for `In-Reply-To` / `References`, so Fastmail rejected it too and `reply` failed with `invalidProperties (header:In-Reply-To:asText, header:References:asText)`.
+
 ## [0.1.3] - 2026-02-17
 
 

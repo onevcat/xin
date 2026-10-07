@@ -333,13 +333,14 @@ async fn send_reply_infers_recipients_and_sets_threading_headers() {
                 return false;
             };
 
-            // We must set parsed header properties, not raw header strings.
-            // header:In-Reply-To:asMessageIds -> ["orig@example.com"]
-            // header:References:asMessageIds -> ["r0@example.com", "orig@example.com"]
-            match (
-                obj.get("header:In-Reply-To:asMessageIds"),
-                obj.get("header:References:asMessageIds"),
-            ) {
+            // We must set the Email `inReplyTo` / `references` properties (RFC 8621),
+            // not any `header:In-Reply-To:*` / `header:References:*` form (Fastmail rejects those).
+            // inReplyTo -> ["orig@example.com"]
+            // references -> ["r0@example.com", "orig@example.com"]
+            if body.contains("header:In-Reply-To") || body.contains("header:References") {
+                return false;
+            }
+            match (obj.get("inReplyTo"), obj.get("references")) {
                 (Some(in_reply_to), Some(references)) => {
                     in_reply_to == &serde_json::json!(["orig@example.com"])
                         && references
