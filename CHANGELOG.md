@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fix `after:` / `before:` search on Fastmail: send filter dates as RFC 8620 `UTCDate` with a `Z` suffix instead of `+00:00`, which Fastmail rejected (`invalidResultReference`).
+
 ## [0.1.3] - 2026-02-17
 
 

@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, SecondsFormat, TimeZone, Utc};
 use serde_json::{Value, json};
 
 use crate::backend::Backend;
@@ -311,6 +311,8 @@ fn parse_bool(value: &str, label: &str) -> Result<bool, XinErrorOut> {
     }
 }
 
+/// Returns an RFC 8620 `UTCDate` (`YYYY-MM-DDTHH:MM:SSZ`). The "Z" suffix is required:
+/// Fastmail rejects `+00:00` in `after`/`before` filters (surfacing as `invalidResultReference`).
 fn parse_date(value: &str, label: &str) -> Result<String, XinErrorOut> {
     // v0: accept YYYY-MM-DD (interpreted as 00:00:00Z) or RFC3339.
     if let Ok(d) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
@@ -318,11 +320,11 @@ fn parse_date(value: &str, label: &str) -> Result<String, XinErrorOut> {
             &d.and_hms_opt(0, 0, 0)
                 .ok_or_else(|| XinErrorOut::usage(format!("invalid date for {label}")))?,
         );
-        return Ok(dt.to_rfc3339());
+        return Ok(dt.to_rfc3339_opts(SecondsFormat::Secs, true));
     }
 
     chrono::DateTime::parse_from_rfc3339(value)
-        .map(|dt| dt.with_timezone(&Utc).to_rfc3339())
+        .map(|dt| dt.with_timezone(&Utc).to_rfc3339_opts(SecondsFormat::Secs, true))
         .map_err(|e| XinErrorOut::usage(format!("invalid {label} date: {e}")))
 }
 
@@ -400,5 +402,20 @@ fn and_all(mut conditions: Vec<Value>) -> Value {
         conditions.pop().unwrap()
     } else {
         op("AND", conditions)
+    }
+}
+
+#[cfg(test)]
+mod date_tests {
+    use super::parse_date;
+
+    // RFC 8620 UTCDate requires a "Z" suffix; Fastmail rejects "+00:00".
+    #[test]
+    fn dates_serialize_as_utc_z() {
+        assert_eq!(parse_date("2026-10-01", "after").unwrap(), "2026-10-01T00:00:00Z");
+        assert_eq!(
+            parse_date("2026-10-01T12:30:00+02:00", "before").unwrap(),
+            "2026-10-01T10:30:00Z"
+        );
     }
 }
